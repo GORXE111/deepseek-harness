@@ -234,10 +234,41 @@
 }
 
 /* figma 34:10434: #ADB2B8 light / #81858C dark — the caption pair exactly. */
+/* One composition, layers swapped. The engine paints its in-progress run with
+   an opaque highlight that rides the textarea, so the backdrop's glyphs beneath
+   it are covered and the textarea's own — transparent — draw nothing: the text
+   being typed becomes a blank block. Restoring the textarea's fill for the
+   composition's length puts highlight and glyphs back on ONE layer, which is
+   where the engine assumes they are. The ink MUST match .backdrop's or every
+   composition would recolor the draft it is being typed into. */
+.inputComposing {
+  color: var(--dsw-alias-label-primary);
+  -webkit-text-fill-color: var(--dsw-alias-label-primary);
+}
+
+/* The other half of that swap: hiding rather than clearing keeps the layer's
+   box — and therefore the mirror's height and both layers' line breaking —
+   exactly as it was, so a composition never reflows the card it sits in. */
+.backdropComposing {
+  visibility: hidden;
+}
+
 .input::placeholder {
   color: var(--dsw-alias-label-caption);
   -webkit-text-fill-color: var(--dsw-alias-label-caption);
   user-select: none;
+}
+
+/* A draft and its placeholder can never both be paint: the backdrop already
+   holds this line, and the two answer to different sources — `draft` here,
+   the textarea's own value in the engine — so any desync between them prints
+   caption grey straight through the glyphs. Withholding the color (rather than
+   the attribute) settles it at the only layer that can be wrong, and leaves the
+   attribute for the accessibility tree and for the composer's placeholder
+   contract, both of which want it present whatever is currently painted. */
+.input[data-draft]::placeholder {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* The backdrop owns disabled draft color; the textarea remains caret-only so

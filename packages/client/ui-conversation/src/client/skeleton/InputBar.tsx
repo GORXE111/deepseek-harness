@@ -144,10 +144,28 @@ export function InputBar({
   // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
   // clearing is deferred one tick because Safari delivers the closing keydown AFTER compositionend.
   const composingRef = useRef(false)
+  // The same composition, but as paint state. An IME draws its in-progress run
+  // with an OPAQUE highlight, and that highlight belongs to the textarea — the
+  // layer ABOVE the backdrop. With the textarea's own glyphs transparent, the
+  // highlight covers the backdrop's glyphs and leaves a blank block exactly
+  // where the user's uncommitted text should be. So for the length of one
+  // composition the two layers swap roles (see .inputComposing): the textarea
+  // paints its own text, keeping highlight and glyphs together as the engine
+  // intends, and the backdrop stands down. It cannot decorate an uncommitted
+  // run anyway, so nothing is lost while it hides.
+  //
+  // Deliberately NOT the ref above: that one guards a keystroke and must not
+  // wait for a render, while this one only decides a paint. It is also cleared
+  // WITHOUT the ref's Safari deferral — the text is committed by then, so the
+  // layers must swap back in the same frame or the backdrop's decorations
+  // arrive one tick late over glyphs the textarea is still painting.
+  const [composing, setComposing] = useState(false)
   const onCompositionStart = (): void => {
     composingRef.current = true
+    setComposing(true)
   }
   const onCompositionEnd = (): void => {
+    setComposing(false)
     setTimeout(() => {
       composingRef.current = false
     }, 10)
@@ -728,22 +746,38 @@ export function InputBar({
           <div className={css.grow}>
             <div
               aria-hidden
-              className={clsx(css.backdrop, textareaDisabled && css.backdropDisabled)}
+              className={clsx(
+                css.backdrop,
+                textareaDisabled && css.backdropDisabled,
+                composing && css.backdropComposing,
+              )}
               data-input-backdrop
+              data-composing={composing || undefined}
               data-disabled={textareaDisabled || undefined}
             >
               {backdrop}
             </div>
             <textarea
               ref={inputRef}
-              className={css.input}
+              className={clsx(css.input, composing && css.inputComposing)}
               value={draft}
+              data-composing={composing || undefined}
               disabled={textareaDisabled}
               readOnly={machineBusy || workspaceTrigger}
               aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : undefined}
               aria-haspopup={workspaceTrigger ? 'menu' : undefined}
               aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
               data-phase={input?.phase ?? 'inert'}
+              // The backdrop paints its glyphs from `draft` while the native
+              // placeholder paints from the textarea's OWN value — two sources for
+              // one line of text. They agree until something desyncs them (an IME
+              // composition abandoned across a submit is the one users hit), and
+              // then BOTH paint: caption grey running straight through the draft.
+              // This flag hands the paint decision to the state that owns the
+              // glyphs (see .input[data-draft]::placeholder) while the attribute
+              // itself stays put, so the field keeps describing itself to
+              // assistive tech and to the value the composer's own contract pins.
+              data-draft={draft !== '' || undefined}
               placeholder={placeholder ?? (parentOffline
                 ? t('placeholder.parentOffline')
                 : disabled
