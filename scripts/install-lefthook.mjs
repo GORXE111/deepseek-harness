@@ -356,13 +356,23 @@ function lockOwnershipChangedError(lockPath) {
   return new Error(`Lefthook installer lock ownership changed for ${lockPath}; refusing to remove it`)
 }
 
+// Windows reports `dev` 0 from `lstat` but the volume serial number from
+// `fstat`, so comparing a handle's `dev` against a path's can never match there
+// and every install fails with a spurious ownership-changed error. Identity still
+// holds through `ino`, which libuv fills from the file index on both paths.
+const DEV_IS_COMPARABLE = process.platform !== 'win32'
+
+function sameFileVolume(a, b) {
+  return !DEV_IS_COMPARABLE || a.dev === b.dev
+}
+
 function releaseInstallLock(lockPath, ownedRecord, ownedStat) {
   const currentStat = installLockStat(lockPath)
   if (
     currentStat === undefined
     || !currentStat.isFile()
     || currentStat.isSymbolicLink()
-    || currentStat.dev !== ownedStat.dev
+    || !sameFileVolume(currentStat, ownedStat)
     || currentStat.ino !== ownedStat.ino
     || readInstallLock(lockPath) !== ownedRecord
   ) {
@@ -402,7 +412,7 @@ async function acquireInstallLock(commonDirectory) {
         publishedStat === undefined
         || !publishedStat.isFile()
         || publishedStat.isSymbolicLink()
-        || publishedStat.dev !== ownedStat.dev
+        || !sameFileVolume(publishedStat, ownedStat)
         || publishedStat.ino !== ownedStat.ino
       ) {
         throw lockOwnershipChangedError(lockPath)
