@@ -32,3 +32,35 @@ export function installThemeStyles(ctx: Context): void {
     }, `ui-theme: ${name} stylesheet`)
   }
 }
+
+/**
+ * Mount the conversation-backdrop sheet and return its writer.
+ *
+ * A single long-lived tag whose text is rewritten, rather than a tag per
+ * selection: the backdrop changes while the user drags a strength slider, and
+ * swapping elements on every frame makes the browser drop and re-decode the
+ * background instead of just repainting it.
+ *
+ * @param ctx - Owning plugin context.
+ * @returns a setter taking the sheet text; an empty string clears the backdrop.
+ */
+export function installBackdrop(ctx: Context): (css: string) => void {
+  if (typeof document === 'undefined') return () => {}
+  let live: HTMLStyleElement | undefined
+  let pending = ''
+  ctx.effect(() => {
+    const tag = document.createElement('style')
+    tag.dataset.plugin = PLUGIN_ID
+    tag.dataset.pluginCss = `${PLUGIN_ID}/conversation-backdrop`
+    // Adopt whatever was set before the effect ran, so a selection restored
+    // from settings during plugin start is not silently dropped.
+    tag.textContent = pending
+    document.head.appendChild(tag)
+    live = tag
+    return () => { live = undefined; tag.remove() }
+  }, 'ui-theme: conversation backdrop stylesheet')
+  return (css) => {
+    pending = css
+    if (live !== undefined) live.textContent = css
+  }
+}
