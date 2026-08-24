@@ -17,11 +17,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
-import { createAppearanceRowStore } from './settings-store.ts'
-import { installThemeStyles } from './styles.ts'
+import { createAppearanceRowStore, type AppearanceSelection } from './settings-store.ts'
+import { installBackdrop, installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
+import { buildBackdropCss, buildOverrides } from './palettes.ts'
 import {
-  DEFAULT_PREFERENCE, isThemePreference, THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
+  DEFAULT_CHAT_BACKGROUND, DEFAULT_CHAT_OPACITY, DEFAULT_PALETTE, DEFAULT_PREFERENCE,
+  isThemePreference, THEME_ACCENT_FIELD, THEME_CHAT_FIELD, THEME_CHAT_OPACITY_FIELD,
+  THEME_PALETTE_FIELD, THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
   type ThemePreference, type ThemeSettings,
 } from '../theme-settings.ts'
 
@@ -32,6 +35,12 @@ export type { ThemePreference, ThemeSettings } from '../theme-settings.ts'
 
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.theme'
+
+/**
+ * Override-layer source key for the palette and accent. One stable key means
+ * each repaint replaces the previous layer instead of stacking a new one.
+ */
+const OVERRIDE_SOURCE = 'ui-theme:appearance'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -392,10 +401,78 @@ export function apply(ctx: ClientContext): void {
 
   const store = createAppearanceRowStore()
   let bound: BoundActions<typeof store> | undefined
+
+  /**
+   * The palette, accent, and backdrop selections. They live here rather than
+   * inside the theme service because they are presentation layered *over*
+   * whichever theme is active: the service's contract is the light/dark
+   * preference, and a user who picks a palette still expects that switch to
+   * keep working.
+   */
+  const selection: AppearanceSelection = {
+    preference: DEFAULT_PREFERENCE,
+    palette: DEFAULT_PALETTE,
+    accent: '',
+    chatBackground: DEFAULT_CHAT_BACKGROUND,
+    chatOpacity: DEFAULT_CHAT_OPACITY,
+  }
+  const setBackdrop = installBackdrop(ctx)
+
+  /**
+   * Push the layered selections out. `overrideTokens` bumps the service
+   * revision, so the store sync below rides the resulting `theme/change`
+   * rather than needing its own notification path.
+   */
+  const paint = (): void => {
+    theme.overrideTokens(OVERRIDE_SOURCE, buildOverrides(selection.palette, selection.accent))
+    setBackdrop(buildBackdropCss(selection.chatBackground, selection.chatOpacity))
+  }
+
+  /** Adopt the durable document's layered selections without writing back. */
+  const adoptSelection = (): void => {
+    const section = host.getSnapshot().value
+    if (section === undefined) return
+    selection.palette = section.palette
+    selection.accent = section.accent
+    selection.chatBackground = section.chatBackground
+    selection.chatOpacity = section.chatOpacity
+    paint()
+  }
+  ctx.effect(() => host.subscribe(adoptSelection), 'ui-theme: appearance selection adoption')
+  adoptSelection()
+
   const sync = (snapshot: ThemeSnapshot): void => {
-    bound?.sync(snapshot.preference, snapshot.revision)
+    selection.preference = snapshot.preference
+    bound?.sync({ ...selection }, snapshot.revision)
   }
   ctx.on('theme/change', sync)
+
+  // Persisting is coalesced: a colour input and a strength slider each emit a
+  // change per pointer frame, and one settings round-trip per frame would put
+  // the durable document on the drag path. Painting stays immediate — the
+  // preview is what the user is dragging against.
+  const pendingWrites = new Map<string, () => void>()
+  let flushTimer: ReturnType<typeof setTimeout> | undefined
+  const flush = (): void => {
+    flushTimer = undefined
+    for (const write of pendingWrites.values()) write()
+    pendingWrites.clear()
+  }
+  ctx.effect(() => () => {
+    if (flushTimer !== undefined) clearTimeout(flushTimer)
+    // Flush on dispose so a selection made in the last frames before teardown
+    // is not lost.
+    flush()
+  }, 'ui-theme: appearance write flush')
+
+  /** Apply one layered field immediately and schedule its persist. */
+  const commit = <K extends keyof ThemeSettings>(field: K, value: ThemeSettings[K]): void => {
+    selection[field] = value
+    paint()
+    pendingWrites.set(field, () => { void host.set(field, value) })
+    if (flushTimer === undefined) flushTimer = setTimeout(flush, 200)
+  }
+
   const injected = (actions: BoundActions<typeof store>): AppearanceRowInjected => {
     bound = actions
     // Re-sync from the getter so no event is lost between registration and
@@ -403,6 +480,10 @@ export function apply(ctx: ClientContext): void {
     sync(theme.getTheme())
     return {
       setTheme: (id) => { theme.setTheme(id) },
+      setPalette: (id) => { commit(THEME_PALETTE_FIELD, id) },
+      setAccent: (accent) => { commit(THEME_ACCENT_FIELD, accent) },
+      setChatBackground: (value) => { commit(THEME_CHAT_FIELD, value) },
+      setChatOpacity: (value) => { commit(THEME_CHAT_OPACITY_FIELD, value) },
     }
   }
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({

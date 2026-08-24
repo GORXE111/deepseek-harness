@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
-  DEFAULT_PREFERENCE, THEME_SETTINGS_NAMESPACE, apply,
+  DEFAULT_CHAT_BACKGROUND, DEFAULT_CHAT_OPACITY, DEFAULT_PALETTE, DEFAULT_PREFERENCE,
+  THEME_SETTINGS_NAMESPACE, apply,
 } from '@deepseek-ai/dsh-client-ui-theme'
 
 class MemorySettings extends SettingsProvider {
@@ -34,9 +35,22 @@ describe('ui-theme host', () => {
     const fiber = ctx.plugin({ apply })
     await fiber.await()
     const ns = settingsNamespace(THEME_SETTINGS_NAMESPACE)
-    expect(ctx.settings.get(ns)).toEqual({ preference: DEFAULT_PREFERENCE })
+    // The whole section defaults, not just the preference: the palette,
+    // accent, and backdrop fields ride the same durable namespace.
+    const defaults = {
+      preference: DEFAULT_PREFERENCE,
+      palette: DEFAULT_PALETTE,
+      accent: '',
+      chatBackground: DEFAULT_CHAT_BACKGROUND,
+      chatOpacity: DEFAULT_CHAT_OPACITY,
+    }
+    expect(ctx.settings.get(ns)).toEqual(defaults)
     await ctx.settings.update(ns, { preference: 'dark' })
-    expect(ctx.settings.get(ns)).toEqual({ preference: 'dark' })
+    expect(ctx.settings.get(ns)).toEqual({ ...defaults, preference: 'dark' })
+    await ctx.settings.update(ns, { palette: 'forest', accent: '#7744ff' })
+    expect(ctx.settings.get(ns)).toEqual({
+      ...defaults, preference: 'dark', palette: 'forest', accent: '#7744ff',
+    })
     await expect(ctx.settings.update(ns, { preference: 'sepia' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
