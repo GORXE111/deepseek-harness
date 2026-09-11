@@ -310,19 +310,28 @@ function startStartupProfile(fixture: StartupFixture, args: readonly string[]) {
 }
 
 describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', () => {
-  it('requires --profile and rejects removed commands', async () => {
-    const bare = await runBuiltBin()
-    expect(bare.code).toBe(1)
-    expect(bare.stdout).toBe('')
-    expect(bare.stderr).toContain('--profile <name> is required')
-    const help = await runBuiltBin(['--help'])
-    expect(help.code).toBe(0)
-    expect(help.stdout).toContain('dsh --profile web')
-    expect(help.stdout).toContain('dsh plugin --profile')
-    expect(help.stdout).not.toMatch(/^\s+(?:tui|meta|upgrade)\b/mu)
-    for (const removed of [['tui'], ['--config', 'x.yml'], ['-p', 'task'], ['run', 'task']]) {
-      const result = await runBuiltBin(removed)
-      expect(result.code).toBe(1)
+  it('defaults to the headless profile and rejects removed commands', async () => {
+    // Omitting --profile now boots headless instead of erroring, and booting
+    // scaffolds $DSH_HOME/profiles/headless — isolate that from the real home.
+    const home = mkdtempSync(join(tmpdir(), 'dsh-default-profile-'))
+    try {
+      const bare = await runBuiltBin([], { DSH_HOME: home })
+      expect(bare.code).toBe(1)
+      expect(bare.stdout).toBe('')
+      expect(bare.stderr).toContain('a task is required')
+      const help = await runBuiltBin(['--help'])
+      expect(help.code).toBe(0)
+      expect(help.stdout).toContain('dsh --profile web')
+      expect(help.stdout).toContain('dsh plugin --profile')
+      expect(help.stdout).not.toMatch(/^\s+(?:tui|meta|upgrade)\b/mu)
+      // 'tui' and 'run task' are no longer invalid — they're just (pointless,
+      // no-mock-LLM) headless task strings now, so they're not exercised here.
+      for (const removed of [['--config', 'x.yml'], ['-p', 'task']]) {
+        const result = await runBuiltBin(removed, { DSH_HOME: home })
+        expect(result.code).toBe(1)
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true })
     }
   }, 30_000)
 

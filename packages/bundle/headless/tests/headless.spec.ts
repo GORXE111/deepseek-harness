@@ -5,7 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
-import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
+import { CallId, createAssistantMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import { apply, Config, internals } from '../src/index.ts'
@@ -143,11 +143,91 @@ describe('headless runner', () => {
     await test.ctx.fiber.dispose()
   })
 
+  it('streams a compact line per tool call before the final answer', async () => {
+    const test = await bench({
+      async afterPrompt(session, message) {
+        await Promise.resolve()
+        session.append('turn/start', { turn: 1 })
+        session.append('step/start', { turn: 1, step: 1 })
+        session.append('user/message', message, { surfaceOp: 'append' })
+        session.append('tool/call', {
+          turn: 1, step: 1, callId: CallId('call-1'), name: 'bash',
+          arguments: JSON.stringify({ description: 'run tests', command: 'npm test' }),
+        })
+        session.append('tool/result', {
+          turn: 1, step: 1,
+          message: createToolResultMessage({ callId: CallId('call-1'), content: [{ type: 'text', text: 'ok' }], isError: false }),
+        }, { surfaceOp: 'append' })
+        session.append('step/end', { turn: 1, step: 1 })
+        session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+        appendTurn(session, 2, message, 'final answer', true)
+      },
+    })
+    const result = await test.run()
+    expect(result).toMatchObject({ code: 0, out: '⏺ Bash(run tests)\nfinal answer\n' })
+    await test.ctx.fiber.dispose()
+  })
+
+  it('marks a failed tool call with the flattened error text', async () => {
+    const test = await bench({
+      async afterPrompt(session, message) {
+        await Promise.resolve()
+        session.append('turn/start', { turn: 1 })
+        session.append('step/start', { turn: 1, step: 1 })
+        session.append('user/message', message, { surfaceOp: 'append' })
+        session.append('tool/call', {
+          turn: 1, step: 1, callId: CallId('call-1'), name: 'read',
+          arguments: JSON.stringify({ path: 'missing.ts' }),
+        })
+        session.append('tool/result', {
+          turn: 1, step: 1,
+          message: createToolResultMessage({
+            callId: CallId('call-1'), content: [{ type: 'text', text: 'ENOENT: missing.ts' }], isError: true,
+          }),
+          error: { name: 'FsError', code: 'ENOENT' },
+        }, { surfaceOp: 'append' })
+        session.append('step/end', { turn: 1, step: 1 })
+        session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+        appendTurn(session, 2, message, 'final answer', true)
+      },
+    })
+    const result = await test.run()
+    expect(result).toMatchObject({ code: 0, out: '⏺ Read(missing.ts) ✗ ENOENT: missing.ts\nfinal answer\n' })
+    await test.ctx.fiber.dispose()
+  })
+
+  it('flushes a still-pending call with no result when the turn ends abnormally', async () => {
+    const test = await bench({
+      afterPrompt(session, message) {
+        session.append('turn/start', { turn: 1 })
+        session.append('step/start', { turn: 1, step: 1 })
+        session.append('user/message', message, { surfaceOp: 'append' })
+        session.append('tool/call', {
+          turn: 1, step: 1, callId: CallId('call-1'), name: 'bash',
+          arguments: JSON.stringify({ command: 'npm test' }),
+        })
+        session.append('step/end', { turn: 1, step: 1 })
+        session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+      },
+    })
+    const result = await test.run()
+    expect(result).toMatchObject({
+      code: 1,
+      out: '⏺ Bash(npm test) (interrupted — no result)\n\n',
+      err: 'dsh: turn did not complete: aborted (user)\n',
+    })
+    await test.ctx.fiber.dispose()
+  })
+
   it('exits 1 when the final turn does not complete', async () => {
     const test = await bench({
       afterPrompt(session, message) { appendTurn(session, 1, message, undefined, false) },
     })
-    expect(await test.run()).toMatchObject({ code: 1, out: '\n', err: '' })
+    expect(await test.run()).toMatchObject({
+      code: 1,
+      out: '\n',
+      err: 'dsh: turn did not complete: aborted (user)\n',
+    })
     await test.ctx.fiber.dispose()
   })
 

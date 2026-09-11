@@ -20,6 +20,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // and the cmdline Context merge for the appExit host value.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-cmdline'
+import { attachProgressReporter, describeAbnormalReason } from './progress.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'headless-runner'
@@ -119,16 +120,20 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   })
   await agent.whenIdle()
   const firstSeq = agent.session.seq
+  const detachProgress = attachProgressReporter(ctx, agent.session, io)
   agent.followup(createUserMessage({
     content: [{ type: 'text', text: task }],
     source: { kind: 'user' },
   }))
   await agent.whenIdle()
+  detachProgress()
   await sessions.flush(agent.session)
   const outcome = summarize(agent.session.events, firstSeq)
   io.stdout.write(outcome.text + '\n')
   if (outcome.reason?.kind === 'error') {
     io.stderr.write(`dsh: ${outcome.reason.error.code}: ${outcome.reason.error.message}\n`)
+  } else if (outcome.reason !== undefined && outcome.reason.kind !== 'completed') {
+    io.stderr.write(`dsh: turn did not complete: ${describeAbnormalReason(outcome.reason)}\n`)
   }
   io.exit(outcome.reason?.kind === 'completed' ? 0 : 1)
 }

@@ -11,11 +11,17 @@
  * and `dsh --profile web -h` prints the web app's help, not this one's.
  *
  * `web` is a hardcoded alias for `--profile web`; `plugin` manages a profile's
- * plugin dependencies by forwarding to pnpm.
+ * plugin dependencies by forwarding to pnpm. Omitting `--profile` on the
+ * default command boots {@link DEFAULT_PROFILE} (the zero-port, one-shot
+ * `headless` bundle) instead of erroring — `web`/`plugin` still resolve their
+ * own profile explicitly and are unaffected.
  * @module @deepseek-ai/dsh/args
  */
 
 import { Command, CommanderError } from 'commander'
+
+/** The profile the default command boots when `--profile` is omitted. */
+const DEFAULT_PROFILE = 'headless'
 
 /** Boot a named profile and hand it the invocation's inner arguments. */
 interface ProfileInvocation {
@@ -63,6 +69,7 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 /** The launcher's own help text; each app prints its own. */
 const HELP_EXAMPLES = `
 Examples:
+  dsh "run the tests"                        same as: dsh --profile headless "run the tests"
   dsh --profile web                          boot the web profile (same as: dsh web)
   dsh --profile headless "run the tests"     answer one task, print the result, and exit
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
@@ -135,11 +142,10 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .action((args: string[], options: BootOptions & { profile?: string }) => {
       // With the app owning -h, the launcher's own help is what a bare
       // `dsh -h` (no profile to hand it to) must print.
-      if (options.profile === undefined) {
-        if (args.some(argument => argument === '-h' || argument === '--help')) program.help()
-        program.error('error: --profile <name> is required')
+      if (options.profile === undefined && args.some(argument => argument === '-h' || argument === '--help')) {
+        program.help()
       }
-      const profile = options.profile
+      const profile = options.profile ?? DEFAULT_PROFILE
       if (profile === '') program.error('error: --profile needs a name')
       resolved = resolveBoot(program, profile, options, args)
     })

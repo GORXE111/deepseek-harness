@@ -1,4 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
@@ -24,19 +27,29 @@ describe('dsh SOURCE launcher (node --import tsx/esm)', () => {
     expect(rootPackage.scripts?.dsh).toBe('node --import tsx/esm apps/cli/src/bin.ts')
   })
 
-  it('boots the source entry and requires a profile', async () => {
-    const result = await execa(process.execPath, ['--import', 'tsx/esm', dshSourceBin], {
-      cwd: repoRoot,
-      input: '',
-      timeout: 25_000,
-      killSignal: 'SIGKILL',
-      reject: false,
-    })
-    if (result.timedOut) {
-      throw new Error(`dsh source launch did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+  it('boots the source entry into the default headless profile and requires a task', async () => {
+    // A bare invocation now defaults to the headless profile instead of
+    // erroring on a missing --profile; booting it scaffolds
+    // $DSH_HOME/profiles/headless, so this run gets its own isolated home
+    // rather than touching whatever DSH_HOME the real environment resolves to.
+    const home = mkdtempSync(join(tmpdir(), 'dsh-source-launch-'))
+    try {
+      const result = await execa(process.execPath, ['--import', 'tsx/esm', dshSourceBin], {
+        cwd: repoRoot,
+        input: '',
+        timeout: 25_000,
+        killSignal: 'SIGKILL',
+        reject: false,
+        env: { ...process.env, DSH_HOME: home },
+      })
+      if (result.timedOut) {
+        throw new Error(`dsh source launch did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+      }
+      expect(result.exitCode).not.toBe(0)
+      expect(result.stderr).toContain('a task is required')
+      expect(result.stdout).toBe('')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
     }
-    expect(result.exitCode).not.toBe(0)
-    expect(result.stderr).toContain('--profile <name> is required')
-    expect(result.stdout).toBe('')
   }, 30_000)
 })
