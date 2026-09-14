@@ -81,6 +81,17 @@ const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
 const PROVIDER = 'deepseek-official'
 
 const DEFAULT_MODELS: DeepSeekCatalogModel[] = [
+  {
+    id: 'deepseek-flash',
+    name: 'DeepSeek-V4.1-Flash',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    inputModalities: ['text', 'image'],
+    imagePixelBudget: DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
+    imageMaxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  },
+  // Legacy names the provider now routes to deepseek-flash server-side
+  // (temporary, per the provider's own changelog); kept for discovery
+  // consumers with saved references until the provider retires them.
   { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', contextWindow: DEFAULT_CONTEXT_WINDOW },
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', contextWindow: DEFAULT_CONTEXT_WINDOW },
   {
