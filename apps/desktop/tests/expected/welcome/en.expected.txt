@@ -1,6 +1,6 @@
-DeepSeek Harness
-DeepSeek Harness
-Welcome to DeepSeek Harness
+DeepSeek Client
+DeepSeek Client
+Welcome to DeepSeek Client
 Build potential. Explore intelligence.
 Sign in
 Add API Key
