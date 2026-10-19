@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-settings-pet/README.md
+/deepseek-ai-dsh-client-ui-settings-pet:
+  en: c5bff628420b94e8
+  zh: 315e9e6ae7468260
+/deepseek-ai-dsh-client-ui-settings-pet/summary:
+  en: 3c547eae41e99db7
+  zh: 9e4882fe967e5451
+/deepseek-ai-dsh-client-ui-settings-pet/table-of-contents:
+  en: 3460b3e585e0c020
+  zh: bb83d3d282b286d8
+/deepseek-ai-dsh-client-ui-settings-pet/use-this-package:
+  en: f31dcb1cc04f38bb
+  zh: fc24db3f0ade1a66
+/deepseek-ai-dsh-client-ui-settings-pet/understand-the-implementation:
+  en: b016a9027de616dd
+  zh: bd3726e9ec45b17a
+/deepseek-ai-dsh-client-ui-settings-pet/model-experience:
+  en: 29058549278ae102
+  zh: 49f559dc9f903cb3
+/deepseek-ai-dsh-client-ui-settings-pet/model-experience/kv-cache-effect:
+  en: efc8e358e47e63f2
+  zh: 84ae62b5f751326c
+/deepseek-ai-dsh-client-ui-settings-pet/known-limitations-and-deferred-work:
+  en: 4ddbcb7d1014f3ca
+  zh: ef9047a7b4fc70a0
