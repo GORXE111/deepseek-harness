@@ -625,3 +625,11 @@
 - id: session-log-deepseek
   config:
     enabled: false
+
+# ── DeepSeek Client: features ───────────────────────────────────────────────
+
+- insert:
+    # MCP servers managed from Settings → Plugins. The id is also the settings
+    # namespace, kept from the 0.1 settings.yaml section so its import lands here.
+    - id: mcp-servers
+      name: '@deepseek-ai/dsh-client-ui-settings-mcp'

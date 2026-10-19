@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP server manager",
+    "description": "Add, remove, and switch MCP servers from settings; each enabled server mounts one MCP client."
+  }
+}
