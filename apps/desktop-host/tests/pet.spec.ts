@@ -226,14 +226,15 @@ describe('companion sessions', () => {
     await b.result(1)
     b.clock.now = new Date(2026, 9, 20, 9, 0, 0)
     b.ask(2)
-    await b.result(2)
+    expect(await b.result(2)).toEqual({ kind: 'ask-result', requestId: 2, ok: true, newDay: true })
     expect(b.workspaceController.archiveSession).toHaveBeenCalledWith({ sessionId: 'pet-session-1' })
     expect(b.sessionController.prompt.mock.calls[1]![0].sessionId).toBe('pet-session-2')
     b.handle({ kind: 'fresh-topic', who: 'miku' })
     b.handle({ kind: 'fresh-topic', who: 'zhuang' })
     await vi.waitFor(() => { expect(b.workspaceController.archiveSession).toHaveBeenCalledWith({ sessionId: 'pet-session-2' }) })
     b.ask(3)
-    await b.result(3)
+    // A fresh topic is the user's own choice; only a day change is announced.
+    expect(await b.result(3)).toEqual({ kind: 'ask-result', requestId: 3, ok: true })
     expect(b.sessionController.prompt.mock.calls[2]![0].sessionId).toBe('pet-session-3')
   })
 

@@ -26,7 +26,14 @@ export type PetHostEvent =
   | { readonly kind: 'busy'; readonly running: boolean }
   | { readonly kind: 'digest'; readonly digest: PetDigest }
   | { readonly kind: 'speech'; readonly who: string; readonly text: string }
-  | { readonly kind: 'ask-result'; readonly requestId: number; readonly ok: boolean; readonly error?: string }
+  | {
+    readonly kind: 'ask-result'
+    readonly requestId: number
+    readonly ok: boolean
+    readonly error?: string
+    /** The question opened a new day's session; the companion no longer remembers earlier days. */
+    readonly newDay?: true
+  }
 
 /** Shell → Host companion commands. */
 export type PetShellCommand =

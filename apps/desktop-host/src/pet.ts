@@ -222,10 +222,11 @@ export function installDesktopPet(
     try { await ctx.get('workspaceController')?.archiveSession({ sessionId: record.id as SessionId }) } catch { /* stays visible */ }
   }
 
-  const sessionFor = async (who: string, preset: string): Promise<PetSessionRecord> => {
+  /** The companion's session for today, and whether an earlier day's session was just set aside for it. */
+  const sessionFor = async (who: string, preset: string): Promise<{ record: PetSessionRecord; newDay: boolean }> => {
     const today = localDay(now())
     const current = sessions.get(who)
-    if (current !== undefined && current.day === today) return current
+    if (current !== undefined && current.day === today) return { record: current, newDay: false }
     if (current !== undefined) {
       sessions.delete(who)
       persist()
@@ -238,14 +239,14 @@ export function installDesktopPet(
     const record = { id: created.sessionId, day: today, greetedAs: '' }
     sessions.set(who, record)
     persist()
-    return record
+    return { record, newDay: current !== undefined }
   }
 
   // Questions to one companion run in order, so two quick asks cannot create two sessions.
   const queues = new Map<string, Promise<void>>()
   const ask = (command: Extract<PetShellCommand, { kind: 'ask' }>): void => {
-    const run = async (): Promise<void> => {
-      const record = await sessionFor(command.who, command.preset)
+    const run = async (): Promise<boolean> => {
+      const { record, newDay } = await sessionFor(command.who, command.preset)
       let text = command.text
       const nickname = settings()?.nickname ?? ''
       if (nickname !== record.greetedAs) {
@@ -264,10 +265,11 @@ export function installDesktopPet(
         mode: 'queue',
         content: [{ type: 'text', text }],
       }, new AbortController().signal)
+      return newDay
     }
     const previous = queues.get(command.who) ?? Promise.resolve()
     const next = previous.then(run).then(
-      () => { emit({ kind: 'ask-result', requestId: command.requestId, ok: true }) },
+      (newDay) => { emit({ kind: 'ask-result', requestId: command.requestId, ok: true, ...newDay ? { newDay } : {} }) },
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
         emit({ kind: 'ask-result', requestId: command.requestId, ok: false, error: message.slice(0, 200) })
