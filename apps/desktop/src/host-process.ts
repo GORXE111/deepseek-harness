@@ -3,6 +3,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
+import { readCompanionHostEvent, type CompanionHostEvent, type CompanionShellCommand } from './companion-protocol.ts'
 import { desktopNodeEnvironment } from './node-environment.ts'
 
 interface ReadyEvent {
@@ -23,7 +24,13 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | {
+/** Desktop companion event; the bridge sends none until the shell starts it. */
+interface CompanionEvent {
+  readonly type: 'pet'
+  readonly event: unknown
+}
+
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | CompanionEvent | { readonly type: 'shutdown-complete' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -79,6 +86,8 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     }
     case 'fatal':
       return typeof candidate.message === 'string' && (candidate.diagnostic === undefined || typeof candidate.diagnostic === 'string')
+    case 'pet':
+      return readCompanionHostEvent(candidate.event) !== undefined
     case 'update-tasks':
       return Number.isSafeInteger(candidate.requestId) && typeof candidate.active === 'boolean'
         && (candidate.error === undefined || typeof candidate.error === 'string')
@@ -165,6 +174,7 @@ export class DesktopHostProcess {
    *   `office-skills` resources fail Host startup.
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
+   * @param onCompanion - Desktop companion events.
    */
   constructor(
     private readonly node: string,
@@ -177,6 +187,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly onCompanion?: (event: CompanionHostEvent) => void,
   ) {}
 
   /**
@@ -216,6 +227,10 @@ export class DesktopHostProcess {
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))
       }
       else if (message.type === 'fatal') this.fail(new DesktopHostFatalError(message.message, message.diagnostic))
+      else if (message.type === 'pet') {
+        const event = readCompanionHostEvent(message.event)
+        if (event !== undefined) this.onCompanion?.(event)
+      }
       else {
         const request = this.controlRequests.get(message.requestId)
         if (message.error === undefined) request?.resolve(message)
@@ -232,6 +247,16 @@ export class DesktopHostProcess {
       })
     })
     return this.readyPromise
+  }
+
+  /**
+   * Deliver one Desktop companion command; dropped while the Host is not connected.
+   * @param command - companion command.
+   */
+  sendCompanion(command: CompanionShellCommand): void {
+    const child = this.child
+    if (child === undefined || !child.connected || this.failureReported || this.stopping) return
+    child.send({ type: 'pet', command }, (error) => { if (error !== null) console.warn('desktop companion: command not delivered', error) })
   }
 
   /**

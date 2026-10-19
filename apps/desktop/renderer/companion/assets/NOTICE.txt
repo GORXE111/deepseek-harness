@@ -1,0 +1,32 @@
+Desktop companion sprites
+=========================
+
+One directory per character, one file per animation: <character>/<animation>.png.
+Each animation has 4 frames of 64x64 on a transparent background (one 256x64 sheet),
+played at 0.5 s per frame. Which animation expresses what is defined in
+../characters.js; this directory holds images only.
+
+Alignment rules (break them and playback jitters):
+- The figure is centered in its cell by the center of its lower body.
+- Feet sit on the same row across one character's animations (MIKU y=60, Zhuang y=63).
+- Alpha is binary (0 or 255); pixel art has no anti-aliased edges.
+
+The pixel art in both sets was made by the author of this project and is not
+third-party material. The characters themselves remain their owners' property:
+
+miku/ (8 animations): idle thinking happy sad wave clap shy sleepy
+  The character is Hatsune Miku, (c) Crypton Future Media, INC. Crypton licenses
+  the character design to international users under CC BY-NC (attribution,
+  non-commercial); this notice is the attribution. Commercial distribution needs
+  Crypton's permission or a different character.
+  License: https://piapro.net/intl/en_for_creators.html
+
+zhuang/ (12 animations): idle thinking happy sad wave nod surprised sleepy
+  lightning sword meditate victory
+  The character 庄方宜 is from Arknights: Endfield, (c) Shanghai Hypergryph Network
+  Technology Co., Ltd. Non-commercial fan work; commercial distribution needs the
+  owner's permission or a different character.
+
+桌面陪伴助手素材：像素图由本项目作者制作；初音未来形象版权属 Crypton Future Media,
+INC.（CC BY-NC，非商业，本文件即署名）；庄方宜形象出自《明日方舟：终末地》，版权属上海
+鹰角网络科技有限公司，同人二次创作，非商业。商业分发须先取得授权或替换形象。

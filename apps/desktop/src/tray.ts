@@ -12,6 +12,8 @@ export interface DesktopTrayOptions {
   readonly open: () => void
   /** Request quit through the same confirmation as every other quit entry. */
   readonly quit: () => void
+  /** Desktop companion toggle, shown as a checked entry when supplied. */
+  readonly companion?: { readonly enabled: () => boolean; readonly toggle: () => void }
 }
 
 /** Tray icon present for the whole run, not only while the window is hidden. */
@@ -32,8 +34,12 @@ export class DesktopTray {
     if (tray === undefined) return
     const { messages } = this.options.locale()
     tray.setToolTip(messages.aboutProduct)
+    const companion = this.options.companion
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: messages.openApplication, click: () => { this.options.open() } },
+      ...companion === undefined ? [] : [{
+        label: messages.companionMenu, type: 'checkbox' as const, checked: companion.enabled(), click: () => { companion.toggle() },
+      }],
       { type: 'separator' },
       { label: messages.quitApplication, click: () => { this.options.quit() } },
     ]))

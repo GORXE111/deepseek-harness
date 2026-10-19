@@ -61,6 +61,8 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { DesktopCompanion } from './companion.ts'
+import { CompanionWindow } from './companion-window.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -440,6 +442,22 @@ async function main(): Promise<void> {
     navigation = next
     return next.promise
   }
+  const companion = new DesktopCompanion({
+    storePath: join(app.getPath('userData'), 'desktop', 'companion.json'),
+    language: () => currentDesktopLocale().id === 'zh-CN' ? 'zh' : 'en',
+    menuLabels: () => {
+      const { messages } = currentDesktopLocale()
+      return { open: messages.companionOpenMain, fresh: messages.companionFreshTopic }
+    },
+    mainWindowFocused: () => mainWindow !== undefined && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused(),
+    openMainWindow: () => { focusPrimaryWindow() },
+    openWindow: handlers => new CompanionWindow({
+      ...handlers,
+      preload: fileURLToPath(new URL('./preload-companion.cjs', import.meta.url)),
+      page: join(app.getAppPath(), 'renderer', 'companion', 'companion.html'),
+    }),
+    onEnabledChange: () => { refreshApplicationMenu() },
+  })
   const platformView = new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   const backend = new DesktopBackendController((onFailure) => {
@@ -447,10 +465,11 @@ async function main(): Promise<void> {
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, (event) => { companion.receive(event) })
     return {
       start: async () => {
         const ready = await host.start()
+        companion.attach((command) => { host.sendCompanion(command) })
         hostCookie = await authenticateWebHost(ready.url)
         hostUrl = ready.url
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
@@ -500,6 +519,7 @@ async function main(): Promise<void> {
       stop: async () => {
         analyticsEnabled = false
         stopAccount?.()
+        companion.detach()
         try { await host.stop(requireCleanStop) }
         catch (error) {
           if (!requireCleanStop || !(error instanceof DesktopHostUncleanExitError)) throw error
@@ -959,6 +979,9 @@ async function main(): Promise<void> {
         click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
       : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
     { type: 'separator' },
+    { label: currentDesktopLocale().messages.companionMenu, type: 'checkbox', checked: companion.enabled,
+      click: () => { companion.setEnabled(!companion.enabled) } },
+    { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
@@ -993,7 +1016,8 @@ async function main(): Promise<void> {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
       tray = new DesktopTray({ iconPath: trayIconPath, locale: currentDesktopLocale,
-        open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
+        open: () => { focusPrimaryWindow() }, quit: () => { app.quit() },
+        companion: { enabled: () => companion.enabled, toggle: () => { companion.setEnabled(!companion.enabled) } } })
     } catch (error) { console.warn('desktop tray: unavailable', error) }
   }
   const backgroundNotice = process.platform === 'win32'
@@ -1252,6 +1276,7 @@ async function main(): Promise<void> {
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
     tray?.dispose()
+    companion.dispose()
     stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
@@ -1270,6 +1295,7 @@ async function main(): Promise<void> {
       backgroundNotice?.dispose()
       updateJournal?.action('quit-requested')
       tray?.dispose()
+      companion.dispose()
       updateDialog.dispose()
       mandatoryUI?.dispose()
       // Installation preparation already awaited Platform storage cleanup.

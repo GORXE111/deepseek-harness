@@ -70,3 +70,17 @@ it('relabels the menu in the current locale and ignores relabel after disposal',
   f.tray.relabel()
   expect(native.menus).toHaveLength(2)
 })
+
+it('shows a checked Desktop Companion entry that toggles it when the shell supplies one', () => {
+  let enabled = true
+  const toggle = vi.fn(() => { enabled = !enabled })
+  const tray = new DesktopTray({ iconPath: 'C:/tray.ico', locale: () => resolveDesktopLocale('zh-CN'), open: vi.fn(), quit: vi.fn(),
+    companion: { enabled: () => enabled, toggle } })
+  const menu = native.menus.at(-1)!
+  expect(labels(menu)).toEqual(['打开 DeepSeek Client', '桌面陪伴助手', 'separator', '退出 DeepSeek Client'])
+  expect(menu[1]).toMatchObject({ type: 'checkbox', checked: true })
+  ;(menu[1] as { click: () => void }).click()
+  expect(toggle).toHaveBeenCalledOnce()
+  tray.relabel()
+  expect(native.menus.at(-1)![1]).toMatchObject({ checked: false })
+})

@@ -1,0 +1,136 @@
+/* The pixel companion: a 64x64 frame sprite scaled by an integer (see sprite.js), never a
+   smoothly scaled image. The window always hugs the visible content (resting, speaking,
+   asking), so no transparent margin blocks clicks to the windows below. */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  font: 13px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.tank {
+  flex: none;
+  align-self: center;
+  position: relative;
+  width: 128px;
+  height: 128px;
+  cursor: grab;
+  /* A gentle float is a translation, kept in CSS rather than redrawn in every frame. */
+  animation: bob 3.4s ease-in-out infinite;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+@keyframes bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+
+/* Held: the float stops for a small struggle and a shadow shows she is off the ground. */
+body.dragging .tank {
+  cursor: grabbing;
+  animation: struggle .3s ease-in-out infinite;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .4));
+}
+@keyframes struggle {
+  0% { transform: rotate(-7deg) scale(1.05) }
+  50% { transform: rotate(5deg) scale(1.05) }
+  100% { transform: rotate(-7deg) scale(1.05) }
+}
+body.state-running .tank { animation-duration: 2.4s }
+
+.bubble, .panel {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 13px;
+  background: rgba(20, 24, 31, .96);
+  color: #e9ebef;
+  opacity: 0;
+  transform: translateX(-8px) scale(.94);
+  transform-origin: left center;
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(.2, .9, .3, 1.25);
+  /* Square, hard-edged frames match the pixel art; rounded corners would fight it. */
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(20, 24, 31, .96), 0 0 0 6px var(--accent, #5b7cff), 0 8px 26px rgba(0, 0, 0, .36);
+}
+.bubble {
+  /* A summary longer than the bubble scrolls rather than being cut silently. */
+  max-height: 100%;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  pointer-events: none;
+}
+body.bubbling .bubble { opacity: 1; transform: none }
+.bubble.hidden, .panel.hidden { display: none }
+
+.panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+body.open .panel { opacity: 1; transform: none; pointer-events: auto }
+
+input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #e9ebef;
+  font: inherit;
+  padding: 4px 2px;
+}
+input::placeholder { color: #7b828f }
+.send {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: var(--accent, #5b7cff);
+  color: #fff;
+  cursor: pointer;
+  font: 600 13px/1 monospace;
+  transition: opacity 140ms ease;
+}
+.send:disabled { opacity: .35; cursor: default }
+
+@media (prefers-reduced-motion: reduce) {
+  .tank { animation: none }
+  body.dragging .tank { animation: none; transform: rotate(-6deg) }
+  .bubble, .panel { transition: none }
+}
+
+/* State accents: resting blue-grey, working blue. */
+body.state-idle { --accent: #6f9bd1 }
+body.state-running { --accent: #5b7cff }
+
+/* Off-screen ruler measuring bubble text with the bubble's own font, line height, and padding;
+   its width is the bubble's outer width: 480 window - 2 x 8 padding - 10 gap - 128 figure. */
+.bubble.ruler {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  box-sizing: border-box;
+  width: 326px;
+  max-height: none;
+  flex: none;
+  opacity: 1;
+  transform: none;
+  transition: none;
+}

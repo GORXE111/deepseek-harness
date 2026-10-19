@@ -132,6 +132,7 @@ const harness = await vi.hoisted(async () => {
   class FakeHost {
     readonly updateTasks = vi.fn(async (_action: 'inspect' | 'lock' | 'unlock') => false)
     readonly inspectQuit = vi.fn(async () => ({ activeTasks: false, scheduledTasks: false }))
+    readonly sendCompanion = vi.fn()
     url = 'http://127.0.0.1:3080/?token=test'
     fetch = vi.fn(async () => Response.json({ hasApiKey: true, writable: true, localePreference: null }))
     readonly ready = deferred()
@@ -456,6 +457,11 @@ describe('desktop main startup', () => {
         : 'test-pnpm',
       nodeBin: packaged ? join('desktop-test-resources', 'runtime', 'bin') : join('desktop-test-app', 'scripts', 'node-bin'),
     })
+  })
+
+  it('starts the companion bridge of the Host it starts', async () => {
+    await readyForUpdate()
+    expect(harness.hosts[0]!.sendCompanion).toHaveBeenCalledWith({ kind: 'start' })
   })
 
   it('starts the Host with authentication popups disabled when local settings are invalid', async () => {
@@ -973,7 +979,7 @@ describe('desktop main startup', () => {
     expect(() => handler(event, 'application', NaN, 34)).toThrow('invalid popup request')
     const application = handler(event, 'application', 48, 34)
     expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label ?? item.type)).toEqual([
-      '关于 DeepSeek Client', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
+      '关于 DeepSeek Client', 'separator', '桌面陪伴助手', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
     ])
     expect(harness.popup.mock.lastCall![0]).toMatchObject({ window, x: 48, y: 34 })
     expect(harness.popup.mock.lastCall![0].callback).toBeTypeOf('function')
@@ -1010,8 +1016,9 @@ describe('desktop main startup', () => {
       : ['Application', 'editMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
     expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'
-      ? ['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
-      : ['about', 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
+      ? ['about', 'separator', en.companionMenu, 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator',
+        'hide', 'hideOthers', 'unhide', 'separator', 'quit']
+      : ['about', 'separator', en.companionMenu, 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
     expect(harness.menu.setApplicationMenu).toHaveBeenCalledOnce()
   })
 

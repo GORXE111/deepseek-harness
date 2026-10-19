@@ -115,6 +115,7 @@ vi.mock('../src/host-process.ts', () => ({
   DesktopHostProcess: class {
     start = state.startHost
     stop = state.stopHost
+    sendCompanion = vi.fn()
     fetch() {
       return Promise.resolve(Response.json({
         loggedIn: false, hasApiKey: state.hasApiKey, writable: true, localePreference: state.preference,

@@ -238,3 +238,27 @@ it.each([undefined, '', 7])('rejects malformed Platform account identity %s on p
   expect(changed.mock.calls).toEqual([[null]])
   await host.stop()
 })
+
+it('exchanges Desktop companion messages over private IPC and refuses malformed ones', async () => {
+  // The fixture echoes each companion command back as a busy event, then reports a malformed one on `stop`.
+  const runtime = projectWithHost(HTTP_HOST.replace("if (message.type !== 'shutdown') return", `if (message.type === 'pet') {
+    if (message.command.kind === 'stop') process.send({ type: 'pet', event: { kind: 'busy', running: 'yes' } })
+    else process.send({ type: 'pet', event: { kind: 'busy', running: message.command.kind === 'start' } })
+    return
+  }
+  if (message.type !== 'shutdown') return`))
+  const received = vi.fn()
+  const failed = vi.fn()
+  const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env, failed,
+    undefined, undefined, undefined, received)
+  hosts.push(host)
+  host.sendCompanion({ kind: 'start' })
+  await host.start()
+  host.sendCompanion({ kind: 'start' })
+  host.sendCompanion({ kind: 'fresh-topic', who: 'miku' })
+  await vi.waitFor(() => { expect(received.mock.calls).toEqual([[{ kind: 'busy', running: true }], [{ kind: 'busy', running: false }]]) })
+  host.sendCompanion({ kind: 'stop' })
+  await vi.waitFor(() => { expect(failed).toHaveBeenCalledWith(expect.objectContaining({ message: 'dsh desktop host sent an invalid IPC event' })) })
+  host.sendCompanion({ kind: 'start' })
+  expect(received).toHaveBeenCalledTimes(2)
+})
