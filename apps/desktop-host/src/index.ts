@@ -14,6 +14,8 @@ import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+import { installDesktopPet } from './pet.ts'
+import { isPetShellCommand, type PetShellCommand } from './pet-protocol.ts'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -44,6 +46,7 @@ async function main(): Promise<void> {
   const control: {
     updateTasks?: ReturnType<typeof installDesktopUpdateTaskControl>
     quitInspection?: ReturnType<typeof installDesktopQuitInspection>
+    pet?: (command: PetShellCommand) => void
   } = {}
   const send = (message: object): Promise<void> => new Promise((resolve, reject) => {
     if (!process.connected || process.send === undefined) { resolve(); return }
@@ -59,6 +62,11 @@ async function main(): Promise<void> {
   process.on('message', (message: unknown) => {
     if (typeof message !== 'object' || message === null || !('type' in message)) return
     if (message.type === 'shutdown') { void stop(); return }
+    // Desktop companion commands; anything malformed is dropped, and commands before the bridge exists are moot.
+    if (message.type === 'pet') {
+      if ('command' in message && isPetShellCommand(message.command)) control.pet?.(message.command)
+      return
+    }
     if (message.type === 'quit-inspection') {
       if (!('requestId' in message) || !Number.isSafeInteger(message.requestId)) return
       const requestId = message.requestId
@@ -99,6 +107,9 @@ async function main(): Promise<void> {
   })
   installPlatformSessionPublisher(ctx, (session) => {
     if (process.connected) process.send?.({ type: 'platform-session', session })
+  })
+  control.pet = installDesktopPet(ctx, (event) => {
+    if (process.connected) process.send?.({ type: 'pet', event }, (error) => { if (error !== null) console.error(error) })
   })
   const url = ctx.connection.authenticatedUrl(`${ctx.webServer.protocol}//127.0.0.1:${String(ctx.webServer.port)}`)
   if (process.connected) process.send?.({ type: 'ready', url, injections: ctx.webServer.collectIndexInjections() }, (error) => { if (error !== null) console.error(error) })

@@ -15,6 +15,10 @@
     { "path": "../../packages/workspace/workspace" },
     { "path": "../../packages/skill/skill-office" },
     { "path": "../../packages/util/home-paths" },
+    { "path": "../../packages/api/session-controller/tsconfig.host.json" },
+    { "path": "../../packages/api/workspace-controller/tsconfig.host.json" },
+    { "path": "../../packages/core/session" },
+    { "path": "../../packages/client/ui-settings-pet/tsconfig.host.json" },
     { "path": "../../packages/skill/tool-workspace-dependencies" },
     {
       "path": "../cli"
