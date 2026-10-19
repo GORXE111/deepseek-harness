@@ -72,7 +72,7 @@ function open(over: Partial<CompanionWindowOptions> = {}) {
   const options = {
     preload: 'C:/app/lib/preload-companion.cjs', page: 'C:/app/renderer/companion/companion.html', character: 'zhuang', locale: 'zh' as const,
     position: { x: 100, y: 200 }, menuLabels: { open: 'Open', fresh: 'Fresh' },
-    onMoved: vi.fn(), onActivate: vi.fn(), onFreshTopic: vi.fn(), onReady: vi.fn(),
+    onMoved: vi.fn(), onActivate: vi.fn(), onFreshTopic: vi.fn(), onReady: vi.fn(), onClosed: vi.fn(),
     onAsk: vi.fn(() => Promise.resolve({ ok: true as const })),
     ...over,
   }
@@ -192,12 +192,25 @@ describe('companion window', () => {
     ])
     f.companion.destroy()
     f.companion.destroy()
+    expect(f.options.onClosed).not.toHaveBeenCalled()
     f.companion.say('late', 1, null)
     expect(f.window.webContents.send).toHaveBeenCalledTimes(4)
     expect(native.handlers.size).toBe(0)
     expect([...native.listeners.values()].every(set => set.size === 0)).toBe(true)
     // The channels are free for the next window.
     expect(() => open()).not.toThrow()
+  })
+})
+
+describe('companion window closed by the user', () => {
+  it('reports the close once and releases its channels', () => {
+    const f = open()
+    f.window.emit('closed')
+    expect(f.options.onClosed).toHaveBeenCalledOnce()
+    expect(native.handlers.size).toBe(0)
+    f.window.destroyed = true
+    f.companion.destroy()
+    expect(f.options.onClosed).toHaveBeenCalledOnce()
   })
 })
 

@@ -29,7 +29,7 @@ export interface CompanionPreferences {
 
 /** Handlers the controller gives a new window. */
 export type CompanionWindowHandlers = Pick<CompanionWindowOptions,
-  'character' | 'locale' | 'position' | 'menuLabels' | 'onMoved' | 'onActivate' | 'onFreshTopic' | 'onAsk' | 'onReady'>
+  'character' | 'locale' | 'position' | 'menuLabels' | 'onMoved' | 'onActivate' | 'onFreshTopic' | 'onAsk' | 'onReady' | 'onClosed'>
 
 /** Environment of the controller. */
 export interface DesktopCompanionOptions {
@@ -129,6 +129,13 @@ export class DesktopCompanion {
         this.view?.setState(this.busy ? 'running' : 'idle')
         this.view?.play('greet')
       },
+      // Closing her window directly means hiding her; the menus show it unchecked.
+      onClosed: () => {
+        this.view = undefined
+        this.announcer.cancel()
+        this.persist({ ...this.preferences, enabled: false })
+        this.options.onEnabledChange?.()
+      },
     })
   }
 
@@ -190,6 +197,9 @@ export class DesktopCompanion {
       case 'speech':
         this.speak(event.who, event.text)
         return
+      case 'turn-end':
+        this.endTurn(event.who, event.error)
+        return
       case 'ask-result': {
         const ask = this.asks.get(event.requestId)
         if (ask === undefined) return
@@ -216,6 +226,19 @@ export class DesktopCompanion {
     this.view.play('reply')
     this.view.setState(this.busy ? 'running' : 'idle')
     this.view.say(text, Math.min(24_000, Math.max(6000, text.length * 220)), this.speech(false))
+  }
+
+  /**
+   * Her own turn ended: she stops thinking, and a failure is said rather than leaving her silent.
+   * @param who - companion whose turn ended.
+   * @param error - failure message, when the turn failed.
+   */
+  private endTurn(who: string, error: string | undefined): void {
+    if (this.view === undefined || who !== this.character) return
+    this.view.setState(this.busy ? 'running' : 'idle')
+    if (error === undefined) return
+    this.view.play('error')
+    this.view.say(this.lines().failed(error), 8000, null)
   }
 
   private announce(digests: CompanionDigest[]): void {

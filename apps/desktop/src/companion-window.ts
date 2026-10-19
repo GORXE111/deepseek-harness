@@ -57,6 +57,8 @@ export interface CompanionWindowOptions {
   readonly onAsk: (text: string) => Promise<CompanionAskResult>
   /** The page decoded its sprites and can receive state. */
   readonly onReady: () => void
+  /** The user closed the window itself (Alt+F4 while the input is open); not called for {@link CompanionWindow.destroy}. */
+  readonly onClosed: () => void
 }
 
 /**
@@ -136,7 +138,11 @@ export class CompanionWindow implements CompanionView {
     // System moves (a display change) still arrive as events.
     window.on('moved', () => { this.schedulePersist() })
     window.once('ready-to-show', () => { window.showInactive() })
-    window.once('closed', () => { this.dispose() })
+    window.once('closed', () => {
+      if (this.disposed) return
+      this.dispose()
+      options.onClosed()
+    })
 
     ipcMain.handle(COMPANION_IPC.resize, (event, mode: unknown, height: unknown) => {
       if (!this.owns(event)) return

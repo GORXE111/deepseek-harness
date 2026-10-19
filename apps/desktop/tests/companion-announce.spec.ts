@@ -140,6 +140,7 @@ describe('characters', () => {
         expect(lines.doneMany(3)).toContain('3')
         expect(lines.doneNamed('甲')).toContain('甲')
         expect(lines.address('老大')).toContain('老大')
+        expect(lines.failed('401')).toContain('401')
       }
     }
   })

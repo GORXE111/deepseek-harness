@@ -132,6 +132,17 @@ describe('companion visibility', () => {
     expect(b.view().say).toHaveBeenCalledWith('好，另起一件', 2600, null)
   })
 
+  it('treats closing her window directly as hiding her', () => {
+    const b = bench({ stored: { enabled: true } })
+    b.start()
+    b.handlers[0]!.onClosed()
+    expect(b.companion.enabled).toBe(false)
+    expect(b.onEnabledChange).toHaveBeenCalledOnce()
+    expect(JSON.parse(readFileSync(join(root, 'companion.json'), 'utf8'))).toEqual({ enabled: false })
+    b.companion.setEnabled(true)
+    expect(b.views).toHaveLength(2)
+  })
+
   it('closes on dispose without forgetting the stored choice', () => {
     const b = bench({ stored: { enabled: true } })
     b.start()
@@ -199,6 +210,23 @@ describe('companion announcements and speech', () => {
     b.companion.receive(work('fix the build'))
     vi.advanceTimersByTime(BATCH_MS)
     expect(b.view().say).toHaveBeenCalledWith('your task “fix the build” is done~', 8000, null)
+  })
+
+  it('stops thinking when her turn ends, and says why when it failed', async () => {
+    const b = bench({ stored: { enabled: true } })
+    b.start()
+    const asked = b.companion.ask('你好')
+    b.companion.receive({ kind: 'ask-result', requestId: 1, ok: true })
+    await asked
+    expect(b.view().setState).toHaveBeenLastCalledWith('running')
+    b.companion.receive({ kind: 'turn-end', who: 'zhuang', error: 'not hers' })
+    expect(b.view().setState).toHaveBeenLastCalledWith('running')
+    b.companion.receive({ kind: 'turn-end', who: 'miku', error: '401 Unauthorized' })
+    expect(b.view().setState).toHaveBeenLastCalledWith('idle')
+    expect(b.view().play).toHaveBeenLastCalledWith('error')
+    expect(b.view().say).toHaveBeenLastCalledWith('呜，MIKU 没能回答：401 Unauthorized', 8000, null)
+    b.companion.receive({ kind: 'turn-end', who: 'miku' })
+    expect(b.view().say).toHaveBeenCalledOnce()
   })
 
   it('drops speech and digests while hidden', () => {

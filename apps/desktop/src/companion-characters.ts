@@ -16,6 +16,8 @@ export interface CompanionLines {
   readonly newDay: string
   /** The question could not be delivered. */
   readonly noSession: string
+  /** Her own turn failed; the detail is the model call's failure message. */
+  readonly failed: (detail: string) => string
   /** Address prefix; only called with a non-empty nickname. */
   readonly address: (nickname: string) => string
   /** One task finished whose prompt is unknown. */
@@ -44,6 +46,7 @@ const MIKU: CompanionCharacter = {
       fresh: '好，换个话题',
       newDay: '新的一天啦，昨天的事 MIKU 忘光光咯',
       noSession: '没能建立 MIKU 的会话',
+      failed: detail => `呜，MIKU 没能回答：${detail}`,
       address: nickname => `${nickname}，`,
       doneOne: '刚才那轮任务搞定啦~',
       doneNamed: task => `你的「${task}」任务搞定啦~`,
@@ -54,6 +57,7 @@ const MIKU: CompanionCharacter = {
       fresh: 'Fresh topic',
       newDay: 'New day~ yesterday is all gone',
       noSession: 'couldn’t start MIKU’s session',
+      failed: detail => `MIKU couldn’t answer: ${detail}`,
       address: nickname => `${nickname}, `,
       doneOne: 'that task is done~',
       doneNamed: task => `your task “${task}” is done~`,
@@ -72,6 +76,7 @@ const ZHUANG: CompanionCharacter = {
       fresh: '好，另起一件',
       newDay: '新的一天，昨天的事我搁下了',
       noSession: '没能建立会话',
+      failed: detail => `这一回没答上来：${detail}`,
       address: nickname => `${nickname}，`,
       doneOne: '刚才那轮活办完了',
       doneNamed: task => `你的「${task}」办完了`,
@@ -82,6 +87,7 @@ const ZHUANG: CompanionCharacter = {
       fresh: 'New topic.',
       newDay: 'New day. I’ve set yesterday aside.',
       noSession: 'couldn’t start the session',
+      failed: detail => `I couldn’t answer this time: ${detail}`,
       address: nickname => `${nickname}, `,
       doneOne: 'that one is done.',
       doneNamed: task => `your task “${task}” is done.`,

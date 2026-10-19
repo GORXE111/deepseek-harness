@@ -25,6 +25,10 @@ it('validates busy, digest, speech, and ask results', () => {
   expect(readCompanionHostEvent({ kind: 'digest', digest: null })).toBeUndefined()
   expect(readCompanionHostEvent({ kind: 'speech', who: 'miku', text: '在' })).toEqual({ kind: 'speech', who: 'miku', text: '在' })
   expect(readCompanionHostEvent({ kind: 'speech', who: 'miku' })).toBeUndefined()
+  expect(readCompanionHostEvent({ kind: 'turn-end', who: 'miku' })).toEqual({ kind: 'turn-end', who: 'miku' })
+  expect(readCompanionHostEvent({ kind: 'turn-end', who: 'miku', error: '401' })).toEqual({ kind: 'turn-end', who: 'miku', error: '401' })
+  expect(readCompanionHostEvent({ kind: 'turn-end', who: 'miku', error: 401 })).toBeUndefined()
+  expect(readCompanionHostEvent({ kind: 'turn-end' })).toBeUndefined()
   expect(readCompanionHostEvent({ kind: 'ask-result', requestId: 3, ok: true, newDay: true })).toEqual({ kind: 'ask-result', requestId: 3, ok: true, newDay: true })
   expect(readCompanionHostEvent({ kind: 'ask-result', requestId: 3, ok: false, error: 'no' })).toEqual({ kind: 'ask-result', requestId: 3, ok: false, error: 'no' })
   for (const bad of [{ requestId: 1.5, ok: true }, { requestId: 1, ok: 'yes' }, { requestId: 1, ok: false, error: 4 }, { requestId: 1, ok: true, newDay: false }]) {

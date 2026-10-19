@@ -31,6 +31,8 @@ export type CompanionHostEvent =
   | { readonly kind: 'busy'; readonly running: boolean }
   | { readonly kind: 'digest'; readonly digest: CompanionDigest }
   | { readonly kind: 'speech'; readonly who: string; readonly text: string }
+  /** A companion's own turn ended; `error` carries the failure when the turn failed. */
+  | { readonly kind: 'turn-end'; readonly who: string; readonly error?: string }
   | {
     readonly kind: 'ask-result'
     readonly requestId: number
@@ -101,6 +103,9 @@ export function readCompanionHostEvent(value: unknown): CompanionHostEvent | und
     }
     case 'speech':
       return string(event.who) && string(event.text) ? { kind: 'speech', who: event.who, text: event.text } : undefined
+    case 'turn-end':
+      if (!string(event.who) || (event.error !== undefined && !string(event.error))) return undefined
+      return { kind: 'turn-end', who: event.who, ...event.error === undefined ? {} : { error: event.error as string } }
     case 'ask-result':
       if (!Number.isSafeInteger(event.requestId) || typeof event.ok !== 'boolean'
         || (event.error !== undefined && !string(event.error)) || (event.newDay !== undefined && event.newDay !== true)) return undefined
