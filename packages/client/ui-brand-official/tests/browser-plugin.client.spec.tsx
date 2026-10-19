@@ -80,12 +80,21 @@ describe('official browser-brand plugin', () => {
 
   it('renders the official name independently from both requested mark sizes', () => {
     const name = render(<OfficialBrandName />)
-    expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
+    expect(name.container.textContent).toBe('DeepSeek Client')
+    expect(name.container.querySelector('svg')).toBeNull()
     name.unmount()
 
     const mark = render(<OfficialBrandMark size={34} />)
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('34')
     mark.rerender(<OfficialBrandMark size={24} />)
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('24')
+  })
+
+  it('gives every rendered mark its own crossing mask', () => {
+    const view = render(<><OfficialBrandMark size={24} /><OfficialBrandMark size={34} /></>)
+    const ids = [...view.container.querySelectorAll('mask')].map(mask => mask.id)
+    expect(new Set(ids).size).toBe(2)
+    const references = [...view.container.querySelectorAll('circle[mask]')].map(circle => circle.getAttribute('mask'))
+    expect(references).toEqual(ids.map(id => `url(#${id})`))
   })
 })
