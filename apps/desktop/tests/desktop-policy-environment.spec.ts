@@ -9,6 +9,7 @@ const auth = { DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuth
 
 it.each(['test', 'production'] as const)('selects the %s policy and authentication together', (deployment) => {
   const policy = resolveDesktopPolicyEnvironment({ ...origins, ...(deployment === 'test' ? auth : {}), DSH_DESKTOP_AUTO_UPDATE_ENV: deployment })
+  if (policy === undefined) throw new Error('expected a policy without the opt-out')
   const origin = deployment === 'test' ? origins.DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN : origins.DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN
   expect(policy).toEqual({ origin, allowedPageOrigins: [origin],
     ...(deployment === 'test' ? { allowedAuthOrigins: ['https://login.example.com'] } : {}),
@@ -45,6 +46,22 @@ it.each([undefined, '[]', '["http://login.example.com"]', '["https://login.examp
 it('rejects login origins in production', () => {
   expect(() => resolveDesktopPolicyEnvironment({ ...origins, ...auth, DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' }))
     .toThrow('must not configure allowedAuthOrigins')
+})
+
+it('omits the policy when the build opts out of mandatory updates', () => {
+  expect(resolveDesktopPolicyEnvironment({ DSH_DESKTOP_MANDATORY_UPDATE: 'off' })).toBeUndefined()
+  expect(resolveDesktopPolicyEnvironment({ ...origins, ...auth, DSH_DESKTOP_MANDATORY_UPDATE: 'off' })).toBeUndefined()
+  for (const platform of ['win32', 'darwin'] as const) {
+    expect(() => {
+      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.test', DSH_DESKTOP_MANDATORY_UPDATE: 'off' },
+        { platform, arch: 'x64' }, { unsigned: true })
+    }).not.toThrow()
+  }
+})
+
+it.each(['on', '0', 'false', ''])('rejects the unsupported mandatory-update switch %j', (value) => {
+  expect(() => resolveDesktopPolicyEnvironment({ ...origins, ...auth, DSH_DESKTOP_MANDATORY_UPDATE: value }))
+    .toThrow('accepts only "off"')
 })
 
 it.each([{ unsigned: true }, { prepareOnly: true }, {}])('requires policy outside local macOS builds in %j', (options) => {

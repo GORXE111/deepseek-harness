@@ -128,6 +128,21 @@ describe('Desktop local packaging configuration', () => {
     })
   })
 
+  it('owns the mandatory-update opt-out in the platform file, never the ambient environment', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_APP_ID=com.example.client\n')
+      const parent = { PATH: 'build-tools', DSH_DESKTOP_MANDATORY_UPDATE: 'off' }
+      const ambient = loadDesktopPackageEnvironment('win32', parent, directory)
+      expect(ambient).toEqual({ PATH: 'build-tools', DSH_DESKTOP_APP_ID: 'com.example.client' })
+      expect(() => { validateDesktopPackageEnvironment(ambient, WINDOWS, { unsigned: true }) })
+        .toThrow('DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN')
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_APP_ID=com.example.client\nDSH_DESKTOP_MANDATORY_UPDATE=off\n')
+      const owned = loadDesktopPackageEnvironment('win32', {}, directory)
+      expect(owned).toEqual({ DSH_DESKTOP_APP_ID: 'com.example.client', DSH_DESKTOP_MANDATORY_UPDATE: 'off' })
+      expect(() => { validateDesktopPackageEnvironment(owned, WINDOWS, { unsigned: true }) }).not.toThrow()
+    })
+  })
+
   it('requires the local file even when ambient configuration exists and rejects other-platform fields', async () => {
     await withDirectory(async (directory) => {
       expect(() => loadDesktopPackageEnvironment('win32', RELEASE, directory)).toThrow(/copy .*\.env.windows.example/u)

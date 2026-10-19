@@ -12,10 +12,20 @@ function origin(value, name) {
 
 /**
  * Resolve mandatory policy metadata before preparing artifacts or accessing signing hardware.
+ *
+ * `DSH_DESKTOP_MANDATORY_UPDATE=off` opts a build out of the mandatory-update service entirely: no
+ * origin is required and no policy reaches the packaged manifest, so the app never polls a policy
+ * server. A redistribution that does not operate DeepSeek's policy service uses this; without it, a
+ * policy pointing at someone else's origin could force-replace the build with a different product.
  * @param {NodeJS.ProcessEnv} environment File-owned release settings; the unselected origin is not required.
- * @returns {{ origin: string, allowedPageOrigins: string[], authentication: 'anonymous' | 'feishu-test', [key: string]: unknown }} Selected policy.
+ * @returns {{ origin: string, allowedPageOrigins: string[], authentication: 'anonymous' | 'feishu-test', [key: string]: unknown } | undefined} Selected policy, or `undefined` when opted out.
  */
 export function resolveDesktopPolicyEnvironment(environment) {
+  const optOut = environment.DSH_DESKTOP_MANDATORY_UPDATE
+  if (optOut !== undefined && optOut !== 'off') {
+    throw new Error('desktop package: DSH_DESKTOP_MANDATORY_UPDATE accepts only "off"')
+  }
+  if (optOut === 'off') return undefined
   const deployment = resolveDesktopAutoUpdateEnvironment(environment)
   const name = deployment === 'test' ? 'DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN' : 'DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN'
   const selected = origin(environment[name], name)
