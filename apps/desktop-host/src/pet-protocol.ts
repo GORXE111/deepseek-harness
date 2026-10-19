@@ -26,6 +26,8 @@ export type PetHostEvent =
   | { readonly kind: 'busy'; readonly running: boolean }
   | { readonly kind: 'digest'; readonly digest: PetDigest }
   | { readonly kind: 'speech'; readonly who: string; readonly text: string }
+  /** A companion's own turn ended; `error` carries the failure when the turn failed. */
+  | { readonly kind: 'turn-end'; readonly who: string; readonly error?: string }
   | {
     readonly kind: 'ask-result'
     readonly requestId: number

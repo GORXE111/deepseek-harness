@@ -33,6 +33,9 @@ export const MAX_DIGEST_PROMPT_CHARS = 600
 /** Longest answer kept in a digest; more only spends tokens on retelling. */
 export const MAX_DIGEST_ANSWER_CHARS = 4000
 
+/** Longest failure message of a companion turn; it is shown in a bubble. */
+export const MAX_TURN_ERROR_CHARS = 200
+
 /**
  * Sessions observed at once. A turn start and its end are not guaranteed to pair (a session
  * deleted mid-turn, an interrupted task), so the oldest observation is dropped past this bound.
@@ -139,9 +142,16 @@ export function installDesktopPet(
     const sessionId = session.id
     const who = companionOf(sessionId)
     if (who !== undefined) {
-      if (event.type !== 'assistant/message') return
-      const text = textOf(event.data.message.content)
-      if (text !== '') emit({ kind: 'speech', who, text })
+      if (event.type === 'assistant/message') {
+        const text = textOf(event.data.message.content)
+        if (text !== '') emit({ kind: 'speech', who, text })
+      } else if (event.type === 'turn/end') {
+        // Without this a failed turn (no credential, no network) would leave her thinking forever.
+        const { reason } = event.data
+        emit(reason.kind === 'error'
+          ? { kind: 'turn-end', who, error: reason.error.message.slice(0, MAX_TURN_ERROR_CHARS) }
+          : { kind: 'turn-end', who })
+      }
       return
     }
     // Subagent sessions report through the session that delegated to them.

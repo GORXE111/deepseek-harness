@@ -213,9 +213,21 @@ describe('companion sessions', () => {
     b.sessionEvent('pet-session-1', 'user/message', { source: { kind: 'user' }, content: text('你好') })
     b.sessionEvent('pet-session-1', 'assistant/message', { message: { content: text('在。') } })
     b.sessionEvent('pet-session-1', 'assistant/message', { message: { content: [] } })
-    b.sessionEvent('pet-session-1', 'turn/end', {})
+    b.sessionEvent('pet-session-1', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(b.events.filter(event => event.kind !== 'ask-result' && event.kind !== 'settings')).toEqual([
-      { kind: 'busy', running: false }, { kind: 'speech', who: 'zhuang', text: '在。' },
+      { kind: 'busy', running: false }, { kind: 'speech', who: 'zhuang', text: '在。' }, { kind: 'turn-end', who: 'zhuang' },
+    ])
+  })
+
+  it('reports a failed companion turn with its message', async () => {
+    const b = bench()
+    b.handle({ kind: 'start' })
+    b.ask(1)
+    await b.result(1)
+    b.sessionEvent('pet-session-1', 'turn/end', { turn: 1, reason: { kind: 'error', error: { message: `401 ${'x'.repeat(300)}`, code: 'AUTH' } } })
+    b.sessionEvent('pet-session-1', 'turn/end', { turn: 2, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    expect(b.events.filter(event => event.kind === 'turn-end')).toEqual([
+      { kind: 'turn-end', who: 'miku', error: `401 ${'x'.repeat(196)}` }, { kind: 'turn-end', who: 'miku' },
     ])
   })
 
