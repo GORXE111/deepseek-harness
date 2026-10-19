@@ -27,9 +27,11 @@ describe('ui-theme host', () => {
     const ctx = new Context()
     const configuration = await liveConfig(ctx, { Config, apply })
     const { fiber } = configuration
-    expect(plainConfig(configuration.fiber.config)).toEqual({ preference: DEFAULT_PREFERENCE, fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '' })
+    expect(plainConfig(configuration.fiber.config)).toEqual({ preference: DEFAULT_PREFERENCE, fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '', palette: 'default', accent: '', chatBackground: 'none', chatOpacity: 0.18 })
     await configuration.update({ preference: 'dark', fontSize: 10, codeFontSize: 16, codeFontFamily: '"Iosevka"' })
-    expect(plainConfig(configuration.fiber.config)).toEqual({ preference: 'dark', fontSize: 10, codeFontSize: 16, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '"Iosevka"', terminalFontFamily: '' })
+    expect(plainConfig(configuration.fiber.config)).toEqual({ preference: 'dark', fontSize: 10, codeFontSize: 16, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '"Iosevka"', terminalFontFamily: '', palette: 'default', accent: '', chatBackground: 'none', chatOpacity: 0.18 })
+    await configuration.update({ palette: 'forest', accent: '#123456', chatBackground: 'wallpaper:0123456789abcdef', chatOpacity: 0.6 })
+    expect(plainConfig(configuration.fiber.config)).toMatchObject({ palette: 'forest', accent: '#123456', chatBackground: 'wallpaper:0123456789abcdef', chatOpacity: 0.6 })
     await configuration.update({ fontSize: 22 })
     expect(plainConfig(configuration.fiber.config)).toMatchObject({ preference: 'dark', fontSize: 22 })
     await expect(configuration.update({ preference: 'sepia' })).rejects.toThrow()

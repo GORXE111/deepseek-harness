@@ -8,7 +8,9 @@
   "files": [
     "src/boot-theme.ts",
     "src/index.ts",
-    "src/theme-settings.ts"
+    "src/theme-settings.ts",
+    "src/wallpaper-paths.ts",
+    "src/wallpapers.ts"
   ],
   "references": [
     {
@@ -22,6 +24,12 @@
     },
     {
       "path": "../../settings/settings"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../connection/tsconfig.host.json"
     }
   ]
 }

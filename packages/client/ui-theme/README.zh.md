@@ -37,6 +37,12 @@ Desktop 的固定快捷键 `Cmd`/`Ctrl` + `+`（或 `=`）和 `Cmd`/`Ctrl` + `-`
 
 三行分别独立设置正文字体（界面与会话正文）、代码字体（代码块、行内代码及其他使用 `--ds-font-family-code` 的文本）与侧栏终端字体。每个输入框接受逗号分隔的字体名，失焦或按 Enter 时提交；清空输入框即恢复内置字体栈。服务会规范化每个列表：去掉引号、反斜杠、尖括号与控制字符，并给 CSS 通用字体族以外的名称加双引号，然后存入 `textFontFamily`、`codeFontFamily` 或 `terminalFontFamily`。用户列表排在该类内置字体栈之前，因此本机缺少的字体会回退到默认字体。输入框接受任何已安装字体的名称，但不枚举本地字体。
 
+### 配色、强调色与聊天背景
+
+外观行还提供六套配色、自定义强调色与聊天背景。它们叠加在当前生效的浅色或深色主题之上，因此选择配色后，配色方案方块仍然有效。配色通过一层 `ctx.theme` 覆盖层写入底色、层级、主色与辅色别名 token 的两种模式；`#rrggbb` 强调色随后替换主色，并为每种模式派生带色调的辅色。未知的配色 id 保持默认配色。背景可以是 `none`、四种各带浅色与深色变体的渐变之一，或一张已存储的壁纸；浓度滑杆为渐变设置 0.04 至 0.45 的不透明度，为壁纸最高可到 1。它在整个会话栏（由 `ui-conversation` 标记的 `[data-conversation-backdrop]`）之下绘制一层，并在选中背景期间清除输入框的输入遮罩，把会话标题行（`[data-conversation-header]`）变为雾面玻璃。选择即时生效，并在停顿 200 ms 后持久化到 `palette`、`accent`、`chatBackground` 与 `chatOpacity`，因此拖动颜色或滑杆时每个字段只写入一次。
+
+壁纸槽只保存一张图片。页面把选中的文件重新编码为 JPEG（1920 px 的图片与 96 px 的缩略图）后上传；存入新图片会替换上一张。当有连接为浏览器提供服务时，宿主侧把图片存到 `$DSH_HOME/wallpapers`，以图片 SHA-256 的前 16 位十六进制命名，并注册仅限所有者访问的 Fetch 路由：`GET`/`POST /api/ui-theme/wallpapers` 列出与上传，`POST /api/ui-theme/wallpapers/remove?id=` 删除，`GET /api/ui-theme/wallpaper?id=[&variant=thumb]` 提供图片。设置文档只保存 `wallpaper:<id>`。删除正在使用的图片会让背景回到 `none`；列出失败时，选择器隐藏。
+
 ### 注册主题
 
 组合可以通过 `ctx.theme` 注册带别名 token 覆盖的第三方主题 id；覆盖层按注册顺序折入活动快照的 token 中。移除其中一个绝不会覆盖最后一个持久化的内置偏好。第三方主题 id 仍是进程内扩展，不会跨越内置 settings schema。

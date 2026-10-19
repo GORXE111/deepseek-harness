@@ -42,8 +42,10 @@ export function ConversationMainPanel(props: ConversationSlotProps) {
     || (shellPhase === 'blank' && (openState === 'open' || summaryBlank === true))
   const phase = settling ? 'settling' : hero ? 'hero' : 'active'
 
+  // data-conversation-backdrop marks the column a decorative backdrop covers: the
+  // whole column, which does not scroll, so the backdrop stays put under the transcript.
   return (
-    <div className={css.root} data-phase={phase}>
+    <div className={css.root} data-phase={phase} data-conversation-backdrop="">
       {renderSlot('conversation.header', {})}
       {renderFactorySlot('conversation.content', {
         variant: 'main',

@@ -35,7 +35,7 @@ async function bench(isLoopback = true) {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  const section: Record<string, unknown> = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '' }
+  const section: Record<string, unknown> = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '', palette: 'default', accent: '', chatBackground: 'none', chatOpacity: 0.18 }
   const namespace = () => ({
     ns: THEME_SETTINGS_NAMESPACE,
     schema: ThemeSettingsSchema.toJSON(),
@@ -172,7 +172,7 @@ describe('ui-theme apply', () => {
   it('adopts all durable font sizes together after a refused batch settles', async () => {
     const host = stubConfigForm<ThemeSettings>()
     const section: ThemeSettings = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13,
-      textFontFamily: '', codeFontFamily: '', terminalFontFamily: '' }
+      textFontFamily: '', codeFontFamily: '', terminalFontFamily: '', palette: 'default', accent: '', chatBackground: 'none', chatOpacity: 0.18 }
     host.publish({ status: 'ready', value: section, revision: 1, writable: true })
     const { theme, keyboard } = await keyboardTheme(host)
     const write = Promise.withResolvers<boolean>()
@@ -473,5 +473,162 @@ describe('ui-theme apply', () => {
     await f2.await()
     await f2.dispose()
     expect(quiet.slots.entries(SLOT)).toHaveLength(0)
+  })
+})
+
+describe('ui-theme layered appearance', () => {
+  const WALLPAPER = 'fedcba9876543210'
+
+  /** Stand in for the Host wallpaper routes; `listing` undefined answers 404 as a Host without the slot does. */
+  function wallpaperHost(listing: string[] | undefined) {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (listing === undefined) return Promise.resolve(new Response(null, { status: 404 }))
+      if (url === '/api/ui-theme/wallpapers' && init?.method === 'POST') {
+        listing.splice(0, listing.length, WALLPAPER)
+        return Promise.resolve(Response.json({ id: WALLPAPER }))
+      }
+      if (url.startsWith('/api/ui-theme/wallpapers/remove')) {
+        listing.splice(0)
+        return Promise.resolve(Response.json({ ok: true }))
+      }
+      return Promise.resolve(Response.json({ items: listing }))
+    }))
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    return calls
+  }
+
+  it('paints the durable palette and accent as an override layer over the active theme', async () => {
+    const b = await bench()
+    b.setHostSection({ palette: 'forest', accent: '#aa00ff' })
+    b.events.emit('settings/document-updated', [THEME_SETTINGS_NAMESPACE, 0])
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const theme = b.ctx.get('theme') as ThemeRuntime
+    await vi.waitFor(() => { expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('#f4f9f6') })
+    expect(theme.getTheme().active.tokens['--dsw-alias-state-business-primary']).toBe('#aa00ff')
+    theme.setTheme('dark')
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('#101815')
+    b.setHostSection({ palette: 'default', accent: '' })
+    b.events.emit('settings/document-updated', [THEME_SETTINGS_NAMESPACE, 0])
+    await vi.waitFor(() => { expect(theme.getTheme().active.tokens['--dsw-alias-state-business-primary']).not.toBe('#aa00ff') })
+  })
+
+  it('waits for the durable section before painting layered selections', async () => {
+    const host = stubConfigForm<ThemeSettings>()
+    const ctx = new Context()
+    await ctx.plugin(SlotRegistry).await()
+    ctx.provide('locale', new LocaleRuntime(ctx))
+    ctx.provide('remote', {} as never)
+    ctx.provide('configForms', { get: () => host.scope } as never)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    onTestFinished(() => ctx.fiber.dispose())
+    const theme = ctx.get('theme') as ThemeRuntime
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBeUndefined()
+    host.publish({ status: 'ready', revision: 1, writable: true, value: {
+      preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '',
+      terminalFontFamily: '', palette: 'midnight', accent: '', chatBackground: 'none', chatOpacity: 0.18,
+    } })
+    await vi.waitFor(() => { expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('#f4f5fb') })
+  })
+
+  it('repaints when a published snapshot lacks the layer a presenter needs', async () => {
+    const b = await bench()
+    b.setHostSection({ palette: 'forest' })
+    b.events.emit('settings/document-updated', [THEME_SETTINGS_NAMESPACE, 0])
+    declareItems(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const theme = b.ctx.get('theme') as ThemeRuntime
+    await vi.waitFor(() => { expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('#f4f9f6') })
+    faceOf(b.slots)
+    const before = theme.getTheme()
+    b.ctx.emit('theme/change', { ...before, active: { ...before.active, tokens: {} } } as ThemeSnapshot)
+    expect(theme.getTheme().revision).toBeGreaterThan(before.revision)
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('#f4f9f6')
+  })
+
+  it('applies layered selections at once and persists one write per field after a drag', async () => {
+    wallpaperHost([])
+    const b = await bench()
+    declareItems(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { instance, face } = faceOf(b.slots)
+    for (const value of [0.2, 0.3, 0.4]) face.setChatOpacity(value)
+    face.setPalette('sakura')
+    expect(instance.getSnapshot()).toMatchObject({ chatOpacity: 0.4, palette: 'sakura' })
+    await vi.waitFor(() => {
+      expect(b.mutate).toHaveBeenCalledWith(THEME_SETTINGS_NAMESPACE, [{ op: 'set', path: ['chatOpacity'], value: 0.4 }], expect.anything())
+      expect(b.mutate).toHaveBeenCalledWith(THEME_SETTINGS_NAMESPACE, [{ op: 'set', path: ['palette'], value: 'sakura' }], expect.anything())
+    })
+    const opacityWrites = b.mutate.mock.calls.filter(([, ops]) => ops[0]?.path[0] === 'chatOpacity')
+    expect(opacityWrites).toHaveLength(1)
+    face.setAccent('#123456')
+    face.setChatBackground('aurora')
+    expect(instance.getSnapshot()).toMatchObject({ accent: '#123456', chatBackground: 'aurora' })
+  })
+
+  it('flushes a pending write when the plugin is disposed', async () => {
+    wallpaperHost([])
+    const b = await bench()
+    declareItems(b.slots)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    faceOf(b.slots).face.setChatBackground('mint')
+    await fiber.dispose()
+    await vi.waitFor(() => {
+      expect(b.mutate).toHaveBeenCalledWith(THEME_SETTINGS_NAMESPACE, [{ op: 'set', path: ['chatBackground'], value: 'mint' }], expect.anything())
+    })
+  })
+
+  it('mirrors the wallpaper slot, stores an upload, and leaves a removed image in use', async () => {
+    const calls = wallpaperHost([])
+    const b = await bench()
+    declareItems(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { instance, face } = faceOf(b.slots)
+    await vi.waitFor(() => { expect(calls).toContain('GET /api/ui-theme/wallpapers') })
+    expect(instance.getSnapshot()).toMatchObject({ wallpapers: [], wallpapersSupported: true })
+
+    expect(await face.addWallpaper({ full: 'data:image/jpeg;base64,AA', thumb: 'data:image/jpeg;base64,AA' })).toBe(WALLPAPER)
+    expect(instance.getSnapshot().wallpapers).toEqual([WALLPAPER])
+    face.setChatBackground(`wallpaper:${WALLPAPER}`)
+
+    await face.removeWallpaper(WALLPAPER)
+    expect(calls).toContain(`POST /api/ui-theme/wallpapers/remove?id=${WALLPAPER}`)
+    expect(instance.getSnapshot()).toMatchObject({ wallpapers: [], chatBackground: 'none' })
+
+    // Removing an image that is not in use leaves the backdrop alone.
+    face.setChatBackground('dusk')
+    await face.removeWallpaper(WALLPAPER)
+    expect(instance.getSnapshot().chatBackground).toBe('dusk')
+  })
+
+  it('hides the slot where the Host serves none and reports a rejected upload', async () => {
+    wallpaperHost(undefined)
+    const b = await bench()
+    declareItems(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { instance, face } = faceOf(b.slots)
+    await vi.waitFor(() => { expect(instance.getSnapshot().wallpapersSupported).toBe(false) })
+    expect(await face.addWallpaper({ full: 'data:image/jpeg;base64,AA', thumb: 'data:image/jpeg;base64,AA' })).toBeUndefined()
+  })
+
+  it('treats a network failure or a malformed listing as no slot or an empty one', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('offline'))))
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    const b = await bench()
+    declareItems(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { instance, face } = faceOf(b.slots)
+    await vi.waitFor(() => { expect(instance.getSnapshot().wallpapersSupported).toBe(false) })
+    expect(await face.addWallpaper({ full: 'x', thumb: 'x' })).toBeUndefined()
+    await face.removeWallpaper(WALLPAPER)
+
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ items: 'not a list' }))))
+    const c = await bench()
+    declareItems(c.slots)
+    await c.ctx.plugin({ inject: [...inject], apply }).await()
+    const malformed = faceOf(c.slots)
+    await vi.waitFor(() => { expect(malformed.instance.getSnapshot()).toMatchObject({ wallpapers: [], wallpapersSupported: true }) })
   })
 })

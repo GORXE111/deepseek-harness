@@ -23,15 +23,19 @@ import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
 import type { FontSettingsInjected } from './FontSettingsGroup.tsx'
 import { FontSettingsGroup } from './FontSettingsGroup.tsx'
-import { createAppearanceRowStore, createFontRowStore } from './settings-store.ts'
-import { installThemeStyles } from './styles.ts'
+import { createAppearanceRowStore, createFontRowStore, type AppearanceSelection } from './settings-store.ts'
+import { installBackdrop, installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
+import { buildBackdropCss, buildOverrides } from './palettes.ts'
+import type { EncodedWallpaper } from './WallpaperPicker.tsx'
 import {
-  DEFAULT_FONT_SIZES, DEFAULT_PREFERENCE, FONT_FAMILY_FIELDS, FONT_ROLES, FONT_SIZE_SPECS,
-  fontFamilyVariable, isFontSize, isThemePreference, normalizeFontFamily, sectionFontSizes,
-  THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
+  DEFAULT_CHAT_BACKGROUND, DEFAULT_CHAT_OPACITY, DEFAULT_FONT_SIZES, DEFAULT_PALETTE, DEFAULT_PREFERENCE,
+  FONT_FAMILY_FIELDS, FONT_ROLES, FONT_SIZE_SPECS, fontFamilyVariable, isFontSize, isThemePreference,
+  normalizeFontFamily, sectionFontSizes, THEME_ACCENT_FIELD, THEME_CHAT_FIELD, THEME_CHAT_OPACITY_FIELD,
+  THEME_PALETTE_FIELD, THEME_PREFERENCE_FIELD, THEME_SETTINGS_NAMESPACE,
   type FontFamilies, type FontRole, type FontSizes, type ThemePreference, type ThemeSettings,
 } from '../theme-settings.ts'
+import { WALLPAPER_REMOVE_PATH, WALLPAPER_SLOT_PATH, wallpaperId } from '../wallpaper-paths.ts'
 
 export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
 export type { FontSettingsGroupProps, FontSettingsInjected } from './FontSettingsGroup.tsx'
@@ -41,6 +45,12 @@ export type { FontFamilies, FontRole, FontSizes, ThemePreference, ThemeSettings 
 
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.theme'
+
+/** Override-layer source of the palette and accent; one stable key makes each repaint replace the previous layer. */
+const APPEARANCE_OVERRIDE_SOURCE = 'ui-theme:appearance'
+
+/** Coalescing window for persisting layered selections while a colour input or slider is dragged. */
+const SELECTION_WRITE_DELAY_MS = 200
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -553,18 +563,108 @@ export function apply(ctx: ClientContext): void {
   let bound: BoundActions<typeof store> | undefined
   const fontStore = createFontRowStore()
   let fontBound: BoundActions<typeof fontStore> | undefined
+
+  // Palette, accent, and backdrop are presentation layered over whichever theme is
+  // active, so they live here rather than in the theme service, whose contract is the
+  // light/dark preference: picking a palette must not stop that switch from working.
+  const selection: AppearanceSelection = {
+    preference: DEFAULT_PREFERENCE,
+    palette: DEFAULT_PALETTE,
+    accent: '',
+    chatBackground: DEFAULT_CHAT_BACKGROUND,
+    chatOpacity: DEFAULT_CHAT_OPACITY,
+  }
+  const setBackdrop = installBackdrop(ctx)
+  // overrideTokens bumps the service revision, so the store sync rides the resulting theme/change.
+  const paint = (): void => {
+    theme.overrideTokens(APPEARANCE_OVERRIDE_SOURCE, buildOverrides(selection.palette, selection.accent))
+    setBackdrop(buildBackdropCss(selection.chatBackground, selection.chatOpacity))
+  }
+  /** Adopt the durable document's layered selections without writing them back. */
+  const adoptSelection = (): void => {
+    const section = host.getSnapshot().value
+    if (section === undefined) return
+    selection.palette = section.palette
+    selection.accent = section.accent
+    selection.chatBackground = section.chatBackground
+    selection.chatOpacity = section.chatOpacity
+    paint()
+  }
+  ctx.effect(() => host.subscribe(adoptSelection), 'ui-theme: appearance selection adoption')
+  adoptSelection()
+
   const sync = (snapshot: ThemeSnapshot): void => {
-    bound?.sync(snapshot.preference, snapshot.revision)
+    selection.preference = snapshot.preference
+    bound?.sync({ ...selection }, snapshot.revision)
     fontBound?.sync(snapshot.fontSizes, snapshot.fontFamilies, snapshot.revision)
+    // A presenter that read its snapshot before the durable selections arrived holds a
+    // snapshot without this layer and has not yet subscribed to theme/change; repaint
+    // until the snapshot carries every expected token. The repaint publishes a snapshot
+    // that does carry them, so it cannot recurse.
+    const expected = Object.keys(buildOverrides(selection.palette, selection.accent))
+    if (expected.some(name => snapshot.active.tokens[name] === undefined)) paint()
   }
   ctx.on('theme/change', sync)
+
+  // Painting is immediate; persisting is coalesced, because a colour input or slider
+  // emits a change per pointer frame and the settings document is not a drag path.
+  const pendingWrites = new Map<string, () => void>()
+  let flushTimer: ReturnType<typeof setTimeout> | undefined
+  const flush = (): void => {
+    flushTimer = undefined
+    for (const write of pendingWrites.values()) write()
+    pendingWrites.clear()
+  }
+  ctx.effect(() => () => {
+    if (flushTimer !== undefined) clearTimeout(flushTimer)
+    flush()
+  }, 'ui-theme: appearance write flush')
+  const commit = <K extends 'palette' | 'accent' | 'chatBackground' | 'chatOpacity'>(field: K, value: AppearanceSelection[K]): void => {
+    selection[field] = value
+    paint()
+    pendingWrites.set(field, () => { void host.set(field, value) })
+    flushTimer ??= setTimeout(flush, SELECTION_WRITE_DELAY_MS)
+  }
+
+  // The wallpaper slot's listing mirrors into the row store; a failed listing means the
+  // Host serves no slot, which hides the picker.
+  const refreshWallpapers = async (): Promise<void> => {
+    const items = await fetch(WALLPAPER_SLOT_PATH).then(async (response) => {
+      if (!response.ok) return undefined
+      const body = await response.json() as { items?: unknown }
+      return Array.isArray(body.items) ? body.items.filter((item): item is string => typeof item === 'string') : []
+    }).catch(() => undefined)
+    bound?.syncWallpapers(items)
+  }
+  const addWallpaper = async (image: EncodedWallpaper): Promise<string | undefined> => {
+    const response = await fetch(WALLPAPER_SLOT_PATH, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(image),
+    }).catch(() => undefined)
+    const id = response?.ok === true ? (await response.json() as { id?: unknown }).id : undefined
+    await refreshWallpapers()
+    return typeof id === 'string' ? id : undefined
+  }
+  const removeWallpaper = async (id: string): Promise<void> => {
+    await fetch(`${WALLPAPER_REMOVE_PATH}?id=${encodeURIComponent(id)}`, { method: 'POST' }).catch(() => undefined)
+    await refreshWallpapers()
+    // Removing the image in use would leave the backdrop pointing at a 404.
+    if (wallpaperId(selection.chatBackground) === id) commit(THEME_CHAT_FIELD, DEFAULT_CHAT_BACKGROUND)
+  }
+
   const injected = (actions: BoundActions<typeof store>): AppearanceRowInjected => {
     bound = actions
     // Re-sync from the getter so no event is lost between registration and
     // first render (the store's revision guard drops stale duplicates).
     sync(theme.getTheme())
+    void refreshWallpapers()
     return {
       setTheme: (id) => { theme.setTheme(id) },
+      setPalette: (id) => { commit(THEME_PALETTE_FIELD, id) },
+      setAccent: (accent) => { commit(THEME_ACCENT_FIELD, accent) },
+      setChatBackground: (value) => { commit(THEME_CHAT_FIELD, value) },
+      setChatOpacity: (value) => { commit(THEME_CHAT_OPACITY_FIELD, value) },
+      addWallpaper,
+      removeWallpaper,
     }
   }
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({

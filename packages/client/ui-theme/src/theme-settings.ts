@@ -14,11 +14,32 @@ export const THEME_PREFERENCE_FIELD = 'preference'
 /** Field carrying the conversation content font size. */
 export const FONT_SIZE_FIELD = 'fontSize'
 
+/** Field carrying the selected colour palette id. */
+export const THEME_PALETTE_FIELD = 'palette'
+
+/** Field carrying the custom accent colour. */
+export const THEME_ACCENT_FIELD = 'accent'
+
+/** Field carrying the conversation backdrop selection. */
+export const THEME_CHAT_FIELD = 'chatBackground'
+
+/** Field carrying the conversation backdrop strength. */
+export const THEME_CHAT_OPACITY_FIELD = 'chatOpacity'
+
 /** Theme preference persisted by the product Appearance row. */
 export type ThemePreference = typeof THEME_PREFERENCES[number]
 
 /** Default preference when the user-settings document has no override. */
 export const DEFAULT_PREFERENCE: ThemePreference = 'system'
+
+/** Palette id that keeps the stock design-platform colours. */
+export const DEFAULT_PALETTE = 'default'
+
+/** Backdrop selection meaning no conversation backdrop. */
+export const DEFAULT_CHAT_BACKGROUND = 'none'
+
+/** Default backdrop strength: low, because the backdrop sits behind live message text. */
+export const DEFAULT_CHAT_OPACITY = 0.18
 
 /** Smallest accepted content font size (px). */
 export const FONT_SIZE_MIN = 10
@@ -104,6 +125,17 @@ export interface ThemeSettings {
   codeFontFamily: string
   /** Sidebar terminal fonts placed before the built-in terminal stack; `''` keeps the built-in stack. */
   terminalFontFamily: string
+  /**
+   * Selected palette id. A free string rather than a union, so an id written by a
+   * newer build falls back to the stock palette instead of rejecting the document.
+   */
+  palette: string
+  /** Custom accent as `#rrggbb`; `''` follows the palette's own accent. */
+  accent: string
+  /** Conversation backdrop: `none`, a preset id, `wallpaper:<id>`, or a legacy `#rrggbb`. */
+  chatBackground: string
+  /** Conversation backdrop strength, clamped by the backdrop kind when painted. */
+  chatOpacity: number
 }
 
 /**
@@ -144,6 +176,10 @@ export const ThemeSettingsSchema: z<ThemeSettings> = z.object({
   [FONT_FAMILY_FIELDS.text]: z.string().default(''),
   [FONT_FAMILY_FIELDS.code]: z.string().default(''),
   [FONT_FAMILY_FIELDS.terminal]: z.string().default(''),
+  [THEME_PALETTE_FIELD]: z.string().default(DEFAULT_PALETTE),
+  [THEME_ACCENT_FIELD]: z.string().default(''),
+  [THEME_CHAT_FIELD]: z.string().default(DEFAULT_CHAT_BACKGROUND),
+  [THEME_CHAT_OPACITY_FIELD]: z.number().default(DEFAULT_CHAT_OPACITY),
 })
 
 /** CSS Fonts generic and system family keywords, which must stay unquoted. */
