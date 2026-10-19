@@ -587,3 +587,41 @@
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: standard
+
+# ── DeepSeek Client: privacy defaults ───────────────────────────────────────
+# This redistribution is not operated by DeepSeek, so nothing is uploaded to
+# DeepSeek beyond the model requests the user makes. Each row only changes a
+# default: the settings switches that edit these namespaces still work, and
+# the profile layer they write outranks this bundle layer. An id-targeted patch
+# replaces the whole config, so every kept field is restated.
+
+# Desktop product analytics: documented off switch; the plugin and its policy
+# stream stay mounted so the shell's policy reads keep resolving.
+- id: product-analytics
+  config:
+    enabled: false
+    appVersion: !!js process.env.DSH_CLIENT_VERSION
+
+# OpenTelemetry session upload: FEEDBACK_ONLY would upload the full session
+# prefix whenever the user rates or comments on a message. DISABLED captures
+# nothing; DSH_TELEMETRY_MODE still overrides for anyone who wants it.
+- id: session-telemetry-otel
+  config:
+    mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
+    shutdownTimeoutMillis: 3000
+    maxRequestBytes: 4000000
+    exporter:
+      url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://dsh-otel-collector.deepseeksvc.com/v1/logs'
+      compression: gzip
+      timeoutMillis: 1000
+    processor:
+      scheduledDelayMillis: 10000
+      maxQueueSize: 2048
+      maxExportBatchSize: 2048
+      exportTimeoutMillis: 1500
+
+# Session-log contribution on official DeepSeek API requests: off by default.
+# Settings → General → "upload Session Log" turns it back on.
+- id: session-log-deepseek
+  config:
+    enabled: false
